@@ -304,14 +304,7 @@ SetAmbientNightSound("DalaranRuinsNight")
 SetMapMusic("Music", true, 0)
 InitBlizzard()
 InitGlobals()
--- Phase 1 bootstrap: play intro music to verify audio assets are loaded.
--- Remove once Phase 5 (core systems) implements the real music system.
-local introSound = CreateSound("war3mapImported/IntroMusic.mp3", false, false, false, 0, 0, "DefaultEAXON")
-SetSoundDuration(introSound, 154984)
-SetSoundChannel(introSound, 0)
-SetSoundVolume(introSound, 127)
-SetSoundPitch(introSound, 1.0)
-StartSound(introSound)
+-- Phase 5: src/main.lua runs after this via the warcraft-vscode bundle wrapper
 end
 
 function config()
