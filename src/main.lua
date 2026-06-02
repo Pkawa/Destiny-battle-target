@@ -36,6 +36,9 @@ ConditionalTriggerExecute(trgIntro)
 -- Register hero selection triggers (mode, difficulty, pick, feats)
 RegisterHeroSelectionTriggers()
 
+-- Register feat selection triggers (feat item pickup + per-level stat bonuses)
+RegisterFeatTriggers()
+
 -- Add floating text labels so players know where to walk
 local function AddModeSelectionLabels()
     local function tag(text, rect, r, g, b)
