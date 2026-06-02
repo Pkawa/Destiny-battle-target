@@ -16,7 +16,8 @@ local function AssignHero(unit, playerIndex)
     end
 end
 
-local function IsHumanPlayer(p)
+-- Global so level1.lua and other modules can use it
+function IsHumanPlayer(p)
     return GetPlayerController(p) == MAP_CONTROL_USER
         and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING
 end
@@ -236,6 +237,14 @@ local function OnPickMode(trigger)
     StopMusicBJ(false)
     SetSkyModel("Environment\\Sky\\LordaeronSummerSky\\LordaeronSummerSky.mdl")
     SetPlayerFlagBJ(PLAYER_STATE_GIVES_BOUNTY, true, Player(9))
+
+    -- Pan all cameras toward the pick area so players see the hero taverns
+    for i = 0, 7 do
+        if IsHumanPlayer(Player(i)) then
+            PanCameraToTimedLocForPlayer(Player(i), GetRectCenter(rct.PickMode), 0)
+            CreateFogModifierRect(Player(i), FOG_OF_WAR_VISIBLE, rct.PickMode, true, false)
+        end
+    end
     -- Start hero preview loop
     CreateTimer()  -- ghost loop runs in its own coroutine via trigger action
     local ghostTrg = CreateTrigger()
@@ -421,6 +430,7 @@ end
 
 local function OnFeatTimerExpires()
     if FeatSelectionDone then return end
+    FeatSelectionDone = true  -- set before sleep to block concurrent feat-leave trigger
 
     -- Give default feat to anyone still in the feat area
     local grp = GetUnitsInRectAll(rct.EntireFeatArea)
@@ -441,6 +451,7 @@ end
 
 -- Triggered when ALL players leave the feat area early
 local function CheckAllLeftFeatArea()
+    if FeatSelectionDone then return end
     local grp = GetUnitsInRectAll(rct.EntireFeatArea)
     local heroCount = 0
     ForGroup(grp, function()
@@ -448,9 +459,9 @@ local function CheckAllLeftFeatArea()
     end)
     DestroyGroup(grp)
 
-    if heroCount == 0 and not FeatSelectionDone then
+    if heroCount == 0 then
+        FeatSelectionDone = true  -- set before sleep to block any concurrent fires
         TriggerSleepAction(1.0)
-        FeatSelectionDone = true
         PauseTimerBJ(true, PickFeatTimer)
         DestroyTimerDialogBJ(GetLastCreatedTimerDialogBJ())
         BeginningStart2()
@@ -461,6 +472,7 @@ end
 
 function BeginningStart2()
     if GameStarted then return end
+    GameStarted = true  -- set immediately to block any concurrent call during the sleeps below
 
     IntroMusicOn    = false
     AntiDuplicateTxt = true
@@ -607,6 +619,19 @@ function RegisterHeroSelectionTriggers()
         local bootTrg = CreateTrigger()
         TriggerAddAction(bootTrg, BootAFKers)
         ConditionalTriggerExecute(bootTrg)
+    end)
+
+    -- Remove Spirit — when a wisp buys a hero from a tavern, remove the wisp.
+    -- war3map.j 17606-17623. EVENT_PLAYER_UNIT_SELL fires when a shop sells a UNIT;
+    -- GetBuyingUnit() is the purchasing wisp. Without this the wisp lingers in
+    -- rct.PickMode and DonePicking's "zero units remain" check never passes.
+    local trgRemoveSpirit = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(trgRemoveSpirit, EVENT_PLAYER_UNIT_SELL)
+    TriggerAddCondition(trgRemoveSpirit, Condition(function()
+        return GetUnitTypeId(GetBuyingUnit()) == FourCC('ewsp')
+    end))
+    TriggerAddAction(trgRemoveSpirit, function()
+        RemoveUnit(GetBuyingUnit())
     end)
 
     -- Manual hero pick zone entry

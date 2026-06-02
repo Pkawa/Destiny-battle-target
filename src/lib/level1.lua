@@ -89,16 +89,10 @@ function Level1Start()
     ThingsToDoBeforeEveryLevelBegins()
     LevelBonuses[1] = true
 
-    GameStarted = true
-    DisableTrigger(CreateTrigger())  -- disable self conceptually (no re-entry guard needed with GameStarted flag)
-
     TriggerSleepAction(1.0)
     PlaySoundBJ(snd.Courageous)
-    DisplayTextToForce(GetPlayersAll(), "|cffff8800Level 1 — Squires approach!|r")
-    TriggerSleepAction(1.0)
     DisplayTimedTextToForce(GetPlayersAll(), 20.0,
-        "|cffaaaaff[Level 1]|r Defend the town from the incoming wave. Enemies march from the north and east.")
-
+        "|cffff8800Level 1|r — Squires approach from the north and east. Defend the town!")
     TriggerSleepAction(1.0)
 
     -- Spawn enemies — (5 + DifficultyModifier) footmen from each of 3 spawns
@@ -119,7 +113,7 @@ function Level1Start()
     end)
     DestroyGroup(grp)
 
-    DisplayTextToForce(GetPlayersAll(), "Enemies are advancing!")
+    DisplayTextToForce(GetPlayersAll(), "|cffaaaaff" .. (5 + DifficultyModifier) .. "x Squires per lane — stop them!|r")
 
     StartFastVictoriesTimer()
     MusicOn          = true

@@ -1,6 +1,7 @@
 require('lib.globals')
 require('lib.regions')
 require('lib.sounds')
+require('lib.units')
 require('lib.hero_pool')
 require('lib.hero_selection')
 require('lib.level1')
