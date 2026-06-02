@@ -1,30 +1,597 @@
-﻿STRING 1
-{
-amap
-}
-
-STRING 2
-{
-Any
-}
-
-STRING 3
-{
-Nondescript
-}
-
-STRING 4
-{
-Unknown
-}
-
-STRING 5
+﻿STRING 2
 {
 Player 1
 }
 
+STRING 3
+{
+Player 2
+}
+
+STRING 4
+{
+Player 3
+}
+
+STRING 5
+{
+Player 4
+}
+
 STRING 6
 {
-Force 1
+Player 5
+}
+
+STRING 7
+{
+Player 6
+}
+
+STRING 8
+{
+Player 7
+}
+
+STRING 9
+{
+Player 8
+}
+
+STRING 19
+{
+|cffff3330Destiny Battle v2.0
+}
+
+STRING 20
+{
+4 to 8
+}
+
+STRING 21
+{
+Battle the forces of Adomach in this Hero Siege/RPG Hybrid Map!
+Over 30 heroes to play, hundreds of items to wield, and many mystical spells to discover.
+https://discord.gg/8uzCZDxn
+}
+
+STRING 22
+{
+Arathil/elpsycongroo
+}
+
+STRING 469
+{
+Assault Forces
+}
+
+STRING 782
+{
+Energy Generation Rate:
+}
+
+STRING 783
+{
+Energy:
+}
+
+STRING 784
+{
+Energy
+}
+
+STRING 785
+{
+Some classes use energy as a resource.  Energy regenerates 1 pt per 3 seconds.
+}
+
+STRING 786
+{
+Energy Generated
+}
+
+STRING 2094
+{
+Type: |Cffffcc00Skirmisher|R
+}
+
+STRING 2095
+{
+Type: |Cffffcc00Light|R
+}
+
+STRING 2096
+{
+Type: |Cffffcc00Mystical|R
+}
+
+STRING 2097
+{
+Type: |Cffffcc00Mystical|R
+}
+
+STRING 2101
+{
+Type: |Cffffcc00Ranged|R
+}
+
+STRING 2103
+{
+Type: |Cffffcc00Heroic|R
+}
+
+STRING 2125
+{
+ 
+}
+
+STRING 2126
+{
+ 
+}
+
+STRING 2265
+{
+|cffff3330Arathil presents...|r
+}
+
+STRING 2266
+{
+|cff32cd32Destiny Battle v2.0|r
+}
+
+STRING 2267
+{
+|cffff3330The Basics:|r
+- Defend Princess Silmeria at all costs.
+- Enemies drop items and scrolls.
+- Spend gold on Upgrades, Items, or Buildings.
+|cffff3330Whats up ahead?|r
+- Other Miscellaneous Tuneups.
+- Map much less slow paced now.
+- 31 waves of enemies.
+- Adomach working.
+- Improved Ai Blue will help out.
+}
+
+STRING 3159
+{
+Monsters
+}
+
+STRING 3533
+{
+Other
+}
+
+STRING 4892
+{
+Not enough gold coins.
+}
+
+STRING 4893
+{
+Not enough energy.
+}
+
+STRING 4894
+{
+You now control %s.
+}
+
+STRING 4895
+{
+Type: |Cffffcc00Heavy|R
+}
+
+STRING 4896
+{
+Type: |Cffffcc00Magical|R
+}
+
+STRING 4897
+{
+Type: |Cffffcc00Reinforced|R
+}
+
+STRING 4898
+{
+Type: |Cffffcc00Agility-Class|R
+}
+
+STRING 4900
+{
+Type: |Cffffcc00Light|R
+}
+
+STRING 4901
+{
+Type: |Cffffcc00Medium|R
+}
+
+STRING 4903
+{
+- Heavy Class Armor takes 10% less damage from Aggressive, Defensive, and Standard attacks.
+}
+
+STRING 4904
+{
+- Magical Class Armor takes 10% less damage from Ranged and Mystical Attack Types.
+}
+
+STRING 4905
+{
+- Reinforced Class Armor takes 10% less damage from all attacks except mystical.
+}
+
+STRING 4906
+{
+- Agility-Class Armor takes 10% less from defensive and ranged attack types.
+}
+
+STRING 4907
+{
+- Agility-Class Armor takes 10% less from defensive and ranged attack types.
+}
+
+STRING 4908
+{
+- Medium Class Armor takes 10% less damage from standard attacks.
+}
+
+STRING 4909
+{
+- Heavy Class Armor takes 10% less damage from Aggressive, Defensive, and Standard attacks.
+}
+
+STRING 4910
+{
+- Magical Class Armor takes 10% less damage from Ranged and Mystical Attack Types.
+}
+
+STRING 4911
+{
+- Reinforced Class Armor takes 10% less damage from all attacks except mystical.
+}
+
+STRING 4912
+{
+- Agility-Class Armor takes 10% less from defensive and ranged attack types.
+}
+
+STRING 4913
+{
+- Natural Armor takes 10% less from standard and mystic attack types.
+}
+
+STRING 4914
+{
+- Medium Class Armor takes 10% less damage from standard attacks.
+}
+
+STRING 4915
+{
+- Heavy Class Armor takes 10% less damage from Aggressive, Defensive, and Standard attacks.
+}
+
+STRING 4916
+{
+- Magical Class Armor takes 10% less damage from Ranged and Mystical Attack Types.
+}
+
+STRING 4917
+{
+- Reinforced Class Armor takes 10% less damage from all attacks except mystical.
+}
+
+STRING 4919
+{
+- Natural-Class Armor takes 10% less from standard and magical based attacks.
+}
+
+STRING 4920
+{
+- Medium Class Armor takes 10% less damage from standard attacks.
+}
+
+STRING 4921
+{
+Gold Coins:
+}
+
+STRING 4922
+{
+Destiny Battle
+}
+
+STRING 4924
+{
+Type: |Cffffcc00Standard|R
+}
+
+STRING 4925
+{
+Type: |Cffffcc00Mystical|R
+}
+
+STRING 4929
+{
+Type: |Cffffcc00Aggressive|r
+}
+
+STRING 4930
+{
+- Deal 10% additional damage to Natural Armor Types.
+}
+
+STRING 4931
+{
+- Deals 10% increased damage vs Heavy and Reinforced Armor Types.
+}
+
+STRING 4932
+{
+- Deals 10% increased damage vs Heavy and Reinforced Armor Types.
+}
+
+STRING 4933
+{
+- Deals no additional damage, but has no reductions.
+}
+
+STRING 4934
+{
+- Deals 10% increased damage vs Light and Magical Armor Types.
+}
+
+STRING 4936
+{
+Artillery Type Attacks deal full damage to all armor types.
+}
+
+STRING 4937
+{
+- Deal 10% additional damage to Natural Armor Types.
+
+}
+
+STRING 4938
+{
+- Deals 10% increased damage vs Heavy and Reinforced Armor Types.
+}
+
+STRING 4939
+{
+- Deals 10% increased damage vs Heavy and Reinforced Armor Types.
+}
+
+STRING 4940
+{
+- Deals no additional damage, but has no reductions.
+}
+
+STRING 4941
+{
+- Deals 10% increased damage vs Light and Magical Armor Types.
+}
+
+STRING 4942
+{
+- Deal 10% additional damage to Light/Magical Armor Types
+}
+
+STRING 4943
+{
+Artillery Type Attacks deal full damage to all armor types.
+}
+
+STRING 4944
+{
+- Deal 10% additional damage to Natural Armor Types.
+}
+
+STRING 4945
+{
+- Deals 10% increased damage vs Heavy and Reinforced Armor Types.
+}
+
+STRING 4946
+{
+- Deals 10% increased damage vs Heavy and Reinforced Armor Types.
+}
+
+STRING 4947
+{
+- Deals no additional damage, but has no reductions.
+}
+
+STRING 4948
+{
+- Deals 10% increased damage vs Light and Magical Armor Types.
+}
+
+STRING 4949
+{
+- Deal 10% additional damage to Light/Magical Armor Types
+}
+
+STRING 4950
+{
+Artillery Type Attacks deal full damage to all armor types.
+}
+
+STRING 4951
+{
+Hero Stats:
+}
+
+STRING 4952
+{
+NPCs
+}
+
+STRING 4953
+{
+The World of Averron
+}
+
+STRING 4954
+{
+The World of Averron
+}
+
+STRING 4955
+{
+The World of Averron
+}
+
+STRING 4956
+{
+Gold Coins
+}
+
+STRING 4957
+{
+Select a Hero (|Cfffed312F8|R)
+}
+
+STRING 4958
+{
+%s has met defeat.
+}
+
+STRING 4959
+{
+%s is victorious!
+}
+
+STRING 4960
+{
+Gold is earned from killing enemies, bonuses, and selling items.
+}
+
+STRING 4961
+{
+Created by Arathil
+}
+
+STRING 4963
+{
+|Cff00ff00Destiny Battle
+}
+
+STRING 4964
+{
+DB:
+}
+
+STRING 4965
+{
+- Deal 10% additional damage to Light/Magical Armor Types
+}
+
+STRING 5007
+{
+- Light Armor takes 10% less from Mystical and Defensive Attack Types.
+}
+
+STRING 5008
+{
+- Light Armor takes 10% less from Mystical and Defensive Attack Types.
+}
+
+STRING 5009
+{
+- Light Armor takes 10% less from Mystical and Defensive Attack Types.
+}
+
+STRING 5010
+{
+Info (|Cfffed312F9|R)
+}
+
+STRING 5137
+{
+Destiny Battle
+}
+
+STRING 5596
+{
+Champions of Vern
+}
+
+STRING 5597
+{
+Adomach's Force
+}
+
+STRING 5719
+{
+https://discord.gg/uExd2rE
+}
+
+STRING 5724
+{
+Destiny Battle - By Arathil (AdamAoE2@gmail.com)
+}
+
+STRING 5725
+{
+Report Bugs, Give Thoughts, and suggest things on the discord!
+}
+
+STRING 5949
+{
+Can't cast that on this unit.
+}
+
+STRING 5950
+{
+%s has died!,%s has died!,%s has died!,%s has died!
+}
+
+STRING 5951
+{
+- Natural Armor takes 10% less from standard and mystic attack types.
+}
+
+STRING 5952
+{
+ - Each point Increases attack speed by 1%.
+}
+
+STRING 5953
+{
+|CFFFFFFFFA|Rbandon your allies.
+}
+
+STRING 5954
+{
+Select your champion!
+}
+
+STRING 5955
+{
+Nearby Hero
+}
+
+STRING 7187
+{
+The Kingdom of Vern
+}
+
+STRING 8083
+{
+Hero Type:
+}
+
+STRING 8084
+{
+Your connection exploded.
+}
+
+STRING 8085
+{
+Join the Destiny Battle Community!
 }
 
