@@ -449,18 +449,27 @@ local function OnFeatTimerExpires()
     BeginningStart2()
 end
 
--- Triggered when ALL players leave the feat area early
+-- Fires when a hero leaves the feat area (each pick). The blue AI companion
+-- (H04Y, Player 1, computer-controlled in Story/Battle/Solo) is also swept into
+-- the feat area by PickFeat but never buys a feat on its own. So we only wait on
+-- *human*-owned heroes; once they have all picked, the companion auto-picks last
+-- (ResolveCompanionFeats in feats.lua) so the game starts immediately instead of
+-- stalling for the full 120s timer.
 local function CheckAllLeftFeatArea()
     if FeatSelectionDone then return end
     local grp = GetUnitsInRectAll(rct.EntireFeatArea)
-    local heroCount = 0
+    local humanHeroes = 0
     ForGroup(grp, function()
-        if IsUnitType(GetEnumUnit(), UNIT_TYPE_HERO) then heroCount = heroCount + 1 end
+        local heroUnit = GetEnumUnit()
+        if IsUnitType(heroUnit, UNIT_TYPE_HERO) and IsHumanPlayer(GetOwningPlayer(heroUnit)) then
+            humanHeroes = humanHeroes + 1
+        end
     end)
     DestroyGroup(grp)
 
-    if heroCount == 0 then
+    if humanHeroes == 0 then
         FeatSelectionDone = true  -- set before sleep to block any concurrent fires
+        ResolveCompanionFeats()   -- blue companion picks last + leaves the area
         TriggerSleepAction(1.0)
         PauseTimerBJ(true, PickFeatTimer)
         DestroyTimerDialogBJ(GetLastCreatedTimerDialogBJ())
@@ -511,10 +520,11 @@ function BeginningStart2()
 
     TriggerSleepAction(11.0)
 
-    -- Start Level 1
-    if not GameStarted then
-        Level1Start()
-    end
+    -- Start Level 1. (No GameStarted guard here — re-entry is already prevented by
+    -- the GameStarted=true set at the top of this function. The reference set
+    -- GameStarted inside Level_1 and guarded here; we moved it up to fix the
+    -- triple-start race, so this call must be unconditional.)
+    Level1Start()
 
     SetPlayerHandicapDamageBJ(Player(9), 75.0)
 end

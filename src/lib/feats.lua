@@ -123,6 +123,28 @@ local function OnHeroLevelForFeat()
     if fn then fn(u) end
 end
 
+-- ── AI companion auto-pick (called when all human players have picked) ────────
+-- The blue companion (H04Y, Player 1 in Story/Battle/Solo) is swept into the
+-- feat area by PickFeat but won't buy a feat itself. Rather than stall the game
+-- until the 120s timer, it picks last: any hero still in the feat area gets a
+-- thematic stat feat (Extra Strong — it's a Paladin-based tank) and is moved out.
+function ResolveCompanionFeats()
+    local grp = GetUnitsInRectAll(rct.EntireFeatArea)
+    ForGroup(grp, function()
+        local hero = GetEnumUnit()
+        if IsUnitType(hero, UNIT_TYPE_HERO) then
+            ModifyHeroStat(bj_HEROSTAT_STR, hero, bj_MODIFYMETHOD_ADD, 2)
+            statLevelHeroes[hero] = function(h)
+                ModifyHeroStat(bj_HEROSTAT_STR, h, bj_MODIFYMETHOD_ADD, 2)
+            end
+            SetUnitPositionLoc(hero, GetRectCenter(rct.StartingPlayerArea))
+            DisplayTextToForce(GetPlayersAll(),
+                GetUnitName(hero) .. " has selected the \"Extra Strong\" Feat.")
+        end
+    end)
+    DestroyGroup(grp)
+end
+
 -- ── Registration ──────────────────────────────────────────────────────────────
 
 function RegisterFeatTriggers()
