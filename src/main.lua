@@ -1,2 +1,3 @@
 -- Game logic entry point.
+
 -- Phase 5+ will add core systems here (globals, hero selection, init triggers).
