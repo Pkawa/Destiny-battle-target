@@ -55,8 +55,8 @@ local function AddModeSelectionLabels()
 end
 AddModeSelectionLabels()
 
--- Register Level 1 bonus tracking trigger
-RegisterLevel1BonusTrigger()
+-- Register per-level bonus tracking triggers (halfway markers + Stalwart Defender)
+RegisterLevelTriggers()
 
 -- Disable fog of war so players can see the menus and map
 FogMaskEnable(false)
