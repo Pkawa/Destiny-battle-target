@@ -342,6 +342,7 @@ local LevelData = {
 -- ─── Generic spawn + victory plumbing ──────────────────────────────────────────
 
 local activeVictoryTrigger = nil
+local levelGen = 0   -- bumped each StartLevel; lets an in-flight victory abort if the level changed (e.g. -goto)
 
 local function spawnLevel(data)
     for _, s in ipairs(data.spawns) do
@@ -391,6 +392,7 @@ end
 StartLevel = nil
 
 local function onLevelVictory(data, levelIndex)
+    local myGen = levelGen
     MusicOn     = false
     BossMusic   = false
     StopAllMusic()        -- silence boss track on victory; vanilla wave music resumes via WaveMusicTick
@@ -412,6 +414,7 @@ local function onLevelVictory(data, levelIndex)
             "|cffaaaaaa[debug] auto-advance off — use -wave to start the next level.|r")
         return
     end
+    if levelGen ~= myGen then return end   -- level changed during the victory sequence (e.g. -goto)
     if data.next and LevelData[data.next] then
         CurrentLevel = data.next
         StartLevel(data.next)
@@ -423,33 +426,35 @@ local function onLevelVictory(data, levelIndex)
 end
 
 local function armClearAllVictory(data, levelIndex)
-    activeVictoryTrigger = CreateTrigger()
-    DisableTrigger(activeVictoryTrigger)
-    TriggerRegisterTimerEventPeriodic(activeVictoryTrigger, 8.0)
-    TriggerAddAction(activeVictoryTrigger, function()
+    local trg = CreateTrigger()   -- capture our OWN trigger (not the shared upvalue)
+    DisableTrigger(trg)
+    TriggerRegisterTimerEventPeriodic(trg, 8.0)
+    TriggerAddAction(trg, function()
         for _, u in ipairs(data.victory.units) do
             if CountLivingPlayerUnitsOfTypeId(u, P9) > 0 then return end
         end
-        DisableTrigger(activeVictoryTrigger)
+        DisableTrigger(trg)
         onLevelVictory(data, levelIndex)
     end)
-    EnableTrigger(activeVictoryTrigger)
+    EnableTrigger(trg)
+    activeVictoryTrigger = trg
 end
 
 local function armBossVictory(data, levelIndex)
-    activeVictoryTrigger = CreateTrigger()
-    TriggerRegisterPlayerUnitEventSimple(activeVictoryTrigger, P9, EVENT_PLAYER_UNIT_DEATH)
-    TriggerAddCondition(activeVictoryTrigger, Condition(function()
+    local trg = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(trg, P9, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(trg, Condition(function()
         return GetUnitTypeId(GetDyingUnit()) == data.victory.unit
     end))
-    TriggerAddAction(activeVictoryTrigger, function()
-        DisableTrigger(activeVictoryTrigger)
+    TriggerAddAction(trg, function()
+        DisableTrigger(trg)
         -- clear remaining trash so the next level starts clean
         local grp = GetUnitsInRectOfPlayer(rct.EntireGameArea, P9)
         ForGroup(grp, function() RemoveUnit(GetEnumUnit()) end)
         DestroyGroup(grp)
         onLevelVictory(data, levelIndex)
     end)
+    activeVictoryTrigger = trg
 end
 
 -- ─── The generic level entry point ─────────────────────────────────────────────
@@ -460,6 +465,11 @@ StartLevel = function(n)
         DisplayTextToForce(GetPlayersAll(), "|cffff0000Level " .. n .. " has no data.|r")
         return
     end
+    -- Cancel any previous level's victory poll/trigger (e.g. when jumping via -goto/-wave
+    -- before the current level was cleared) so it can't fire for the wrong level.
+    if activeVictoryTrigger then DisableTrigger(activeVictoryTrigger); activeVictoryTrigger = nil end
+    levelGen = levelGen + 1
+
     CurrentLevel = n
     ThingsToDoBeforeEveryLevelBegins()
     LevelBonuses[n] = true

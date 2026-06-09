@@ -49,19 +49,15 @@ local function argWord()
     return ((GetEventPlayerChatString() or ""):match("%s+(%a+)") or ""):lower()
 end
 
-local HELP =
-    "|cff00ff00=== DEBUG COMMANDS ===|r|n" ..
-    "-debug : toggle debug   |   -debug help : this list|n" ..
-    "-wave : start next level's waves|n" ..
-    "-stop : toggle wave auto-advance|n" ..
-    "-goto N : jump to game level N|n" ..
-    "-lvl N : set your hero to level N|n" ..
-    "-kill : clear the current wave|n" ..
-    "-gold N : give N gold|n" ..
-    "-item unc|rare|epic|arti , -mythic : spawn loot at your hero|n" ..
-    "-tp : teleport your hero to the cursor|n" ..
-    "-repick : re-pick your hero (then a feat)|n" ..
-    "-defeat : instant defeat   |   -megaboss : (not ported yet)"
+-- One message per line (DisplayText doesn't reliably honor "|n" newlines).
+local HELP = {
+    "|cff00ff00=== DEBUG COMMANDS (gate: -debug) ===|r",
+    "-debug help : show this  |  -stop : toggle wave auto-advance",
+    "-wave : next waves  |  -goto N : jump to level N  |  -kill : clear wave",
+    "-lvl N : set hero level  |  -gold N : give gold  |  -tp : hero to cursor",
+    "-item unc|rare|epic|arti , -mythic : spawn loot at your hero",
+    "-repick : re-pick hero+feat  |  -defeat : lose  |  -megaboss : (stub)",
+}
 
 function RegisterDebugCommands()
     -- cursor tracker for -tp (only does work while debug is on)
@@ -98,7 +94,8 @@ function RegisterDebugCommands()
     -- ── master toggle + help ──
     cmd("-debug", false, function()
         if (GetEventPlayerChatString() or ""):lower():find("help") then
-            tell(GetTriggerPlayer(), HELP)
+            local p = GetTriggerPlayer()
+            for _, line in ipairs(HELP) do DisplayTimedTextToForce(GetForceOfPlayer(p), 25.0, line) end
             return
         end
         DebugMode = not DebugMode

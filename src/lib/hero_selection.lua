@@ -526,11 +526,16 @@ function BeginningStart2()
     BeginWaveMusic()
     TriggerSleepAction(2.0)
 
-    -- Start Level 1. (No GameStarted guard here — re-entry is already prevented by
-    -- the GameStarted=true set at the top of this function. The reference set
-    -- GameStarted inside Level_1 and guarded here; we moved it up to fix the
-    -- triple-start race, so this call must be unconditional.)
-    Level1Start()
+    -- Start Level 1 — unless debug -stop was enabled pre-game, in which case hold the
+    -- first wave too (CurrentLevel=0 so -wave starts Level 1). (No GameStarted guard
+    -- here — re-entry is already prevented by GameStarted=true at the top.)
+    if DebugNoAutoAdvance then
+        CurrentLevel = 0
+        DisplayTextToForce(GetPlayersAll(),
+            "|cffaaaaaa[debug] auto-advance off — type -wave to spawn the first wave.|r")
+    else
+        Level1Start()
+    end
 
     SetPlayerHandicapDamageBJ(Player(9), 75.0)
 end
