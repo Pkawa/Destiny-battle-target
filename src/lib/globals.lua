@@ -301,3 +301,30 @@ Seafaring               = {}
 -- Leaver system
 PlayersLeft = 0
 LeaverGold  = 0
+
+-- ── Per-class achievement flags + player handles (Achievements.md / HeroClassAchievements.md)
+-- Flags are set by detection triggers (Phase 7); payouts are in BonusesAndUpkeep (levels.lua).
+-- All start false / nil; detection triggers set them when milestones are hit.
+ClericofOrderBonusA = false;  ClericofOrderBonusB = false;   ClericofOrderPlayer = nil
+ClericOTSFBonusA    = false;  ClericOTSFBonusB    = false;   ClericOTSFPlayer    = nil
+EarthenTemplarBonusA= false;  EarthenTemplarBonusB= false;   EarthenTemplarPlayer= nil
+DwarvenAxeMasterBonusA= false; DwarvenAxeMasterBonusB= false; DwarvenAMPlayer    = nil
+MonkEFBonusA        = false;  MonkEFBonusB        = false;   MonkEFPlayer        = nil
+ManAtArmsBonusA     = false;  ManAtArmsBonusB     = false;   ManAtArmsPlayer     = nil
+MasterOTABonusA     = false;  MasterOTABonusB     = false;   MasterOfTheArtPlayer= nil
+FeralArchonBonus    = false;  FeralArchonBonusB   = false;   FeralArchonPlayer   = nil
+HumanEngineerBonusA = false;  HumanEngineerBonusB = false;   HumanEngineerPlayer = nil
+SunSoulBonusA       = false;  SunSoulBonusB       = false;   SunSoulPenalty      = false; SunSoulPlayer = nil
+PaladinJusticeBonusA= false;  PaladinJusticeBonusB= false;   PaladinJusticePlayer= nil
+DwarvenRFBonusA     = false;  DwarvenRFBonusB     = false;   DwarvenRFPlayer     = nil
+DiscipleBonusA      = false;  DiscipleBonusB      = false;   DisciplePlayer      = nil
+GraceBonusObtained  = false
+ArcaneArcherBonusA  = false;  ArcaneArcherBonusB  = false;   ArcaneArcherPlayer  = nil
+AxeBrotherBonusA    = false;  AxeBrotherBonusB    = false;   AxeBrotherPlayer    = nil
+CentaurDruidBonusA  = false;  CentaurDruidBonusB  = false;   CentaurDruidPlayer  = nil
+ClericElvenWordBonusA= false; ClericElvenWordBonusB= false;   ClericEWPlayer      = nil
+CrestedDrakeBonusA  = false;  CrestedDrakeBonusB  = false;   CrestedDrakePlayer  = nil
+HEBardBonusA        = false;  HEBardBonusB        = false;   BardPlayer          = nil
+RogueOTDBonusA      = false;  RogueOTDBonusB      = false;   RogueOTDBonusC      = false
+SharpshooterBonusB  = false;  SharpshooterPlayer  = nil
+MajinPlayer         = nil  -- set when Reckless Pyromancer kills an ally with a spell

@@ -73,9 +73,10 @@ function BonusReset()
     if underAttackTrg then EnableTrigger(underAttackTrg) end  -- re-arm warning (war3map.j 6420)
 end
 
--- ─── Bonuses & Upkeep (universal bonuses; per-class payouts pending — Achievements.md) ──
+-- ─── Bonuses & Upkeep (war3map.j 6431-7317, Upkeep_2 7319-7414) ──────────────
 
 function BonusesAndUpkeep(levelIndex)
+    -- Helper: award gold + message to ALL human players.
     local function awardAll(gold, msg)
         DisplayTimedTextToForce(GetPlayersAll(), 10.0, msg)
         for i = 0, 7 do
@@ -86,34 +87,162 @@ function BonusesAndUpkeep(levelIndex)
         TotalBonusGold = TotalBonusGold + gold
     end
 
+    -- Helper: award gold + message to ONE specific player.
+    local function awardOne(gold, player, msg)
+        if not player then return end
+        DisplayTimedTextToForce(GetPlayersAll(), 10.0, msg)
+        AdjustPlayerStateBJ(gold, player, PLAYER_STATE_RESOURCE_GOLD)
+        TotalBonusGold = TotalBonusGold + gold
+    end
+
+    -- ── Universal bonuses (war3map.j 6886-6960) ───────────────────────────────
     if HeroFlawlessDeath then
         awardAll(100, "|cff00ff00Flawless!|r No hero died this round — |cffffcc00+100 Gold|r each.")
     elseif PlayerTotalDeathsForRound == 0 then
-        awardAll(50, "|cff00ff00No deaths this round — |cffffcc00+50 Gold|r each.")
+        awardAll(50, "|cff00ff00No hero deaths this round — |cffffcc00+50 Gold|r each.")
     end
     if StalwartDefender then
         awardAll(50, "|cff00ff00Stalwart Defender!|r No enemy reached the base — |cffffcc00+50 Gold|r each.")
+    end
+    -- Fountain bonus: is it at max mana? (war3map.j 6915-6923)
+    if unit_h010 and GetUnitStateSwap(UNIT_STATE_MANA, unit_h010)
+        >= GetUnitStateSwap(UNIT_STATE_MAX_MANA, unit_h010) then
+        awardAll(50, "|cff00ccffFountain Full!|r Fountain at max mana — |cffffcc00+50 Gold|r each.")
     end
     if BlazingVictory then
         awardAll(200, "|cff00ff00Blazing Victory!|r Won in under 60s — |cffffcc00+200 Gold|r each.")
     elseif SpeedyVictory then
         awardAll(100, "|cff00ff00Speedy Victory!|r Won in under 120s — |cffffcc00+100 Gold|r each.")
     end
+    -- Plant Hater: cleared all plant/treant enemies (war3map.j 6945-6953)
+    if PlantHater then
+        awardAll(200, "|cff00ff00Plant Hater!|r Cleansed the plant scourge — |cffffcc00+200 Gold|r each.")
+        PlantHater = false
+    end
+    -- Prince is in danger: HP ≤ 150 (war3map.j 6954-6961)
+    if unit_H02G and GetUnitStateSwap(UNIT_STATE_LIFE, unit_H02G) <= 150.0 then
+        awardAll(10, "|cffff8800Prince is in danger! — |cffffcc00+10 Gold|r each.")
+    end
+
+    -- ── Level challenge bonus (already armed in StartLevel) ───────────────────
     if levelIndex and LevelBonuses[levelIndex] then
         awardAll(100, "|cff00ff00Level Bonus — |cffffcc00+100 Gold|r (level challenge met!)")
         LevelBonuses[levelIndex] = false
     end
-    -- Applied Knowledge feat: bonus XP per level end (war3map.j 15850-15857)
+
+    -- ── Milestone bonuses (war3map.j 6966-6990) ───────────────────────────────
+    if FirstToDingOn then
+        awardOne(50, FirstToDing,
+            GetPlayerName(FirstToDing) .. " - |cffff0000- Leading the Way! - |r|cffffcc00+50 Gold|r - (First to hit level 2.)")
+        FirstToDingOn = false
+    end
+    if bonusFirstToBuildOn then
+        awardOne(100, FirstToBuild,
+            GetPlayerName(FirstToBuild) .. " - |cffff0000- Constructor! - |r|cffffcc00+100 Gold|r - (First to build.)")
+        bonusFirstToBuildOn = false
+    end
+    if bonusFirstToResearchOn then
+        awardOne(100, FirstToResearch,
+            GetPlayerName(FirstToResearch) .. " - |cffff0000- Researcher! - |r|cffffcc00+100 Gold|r - (First to research.)")
+        bonusFirstToResearchOn = false
+    end
+
+    -- ── Man-at-Arms Hired Wages (war3map.j 6863-6882) ─────────────────────────
+    local wagePayouts = { 25, 50, 75, 100, 150 }
+    if HiredWages >= 1 and HiredWages <= 5 and HiredWagesPlayer then
+        local pay = wagePayouts[HiredWages]
+        AdjustPlayerStateBJ(pay, HiredWagesPlayer, PLAYER_STATE_RESOURCE_GOLD)
+        WageTotal = WageTotal + pay
+        TotalBonusGold = TotalBonusGold + pay
+    end
+
+    -- ── Per-class achievement bonuses (war3map.j 6991-7308) ───────────────────
+    -- Pattern: if <Flag> then awardOne(gold, <ClassPlayer>, <msg>); <Flag>=false
+    local function classBonus(flag, player, gold, msg)
+        if not flag then return end
+        awardOne(gold, player, msg)
+        return false  -- caller must assign the result back
+    end
+    -- Use inline assignments since Lua closures capture upvalues:
+    if ClericofOrderBonusA  then awardOne(200, ClericofOrderPlayer,  GetPlayerName(ClericofOrderPlayer)  .. " - |cffff0000- Dedicated Healer! - |cffffcc00+200 Gold|r - (Healed an ally that was about to die.)");      ClericofOrderBonusA  = false end
+    if ClericofOrderBonusB  then awardOne(100, ClericofOrderPlayer,  GetPlayerName(ClericofOrderPlayer)  .. " - |cffff0000- Symbol of Hope! - |cffffcc00+100 Gold|r - (Protected an ally in grave danger.)");           ClericofOrderBonusB  = false end
+    if ClericOTSFBonusA     then awardOne(75,  ClericOTSFPlayer,     GetPlayerName(ClericOTSFPlayer)     .. " - |cffff0000- Chaplain! - |cffffcc00+75 Gold|r - (Frequent use of heals on allies.)");                   ClericOTSFBonusA     = false end
+    if ClericOTSFBonusB     then awardOne(75,  ClericOTSFPlayer,     GetPlayerName(ClericOTSFPlayer)     .. " - |cffff0000- Slingshot Pro! - |cffffcc00+75 Gold|r - (Frequent Flurry of Slingstones.)");               ClericOTSFBonusB     = false end
+    if EarthenTemplarBonusA then awardOne(150, EarthenTemplarPlayer, GetPlayerName(EarthenTemplarPlayer) .. " - |cffff0000- Rage of the Earth! - |cffffcc00+150 Gold|r - (6+ earth elementals.)");                     EarthenTemplarBonusA = false end
+    if EarthenTemplarBonusB then awardOne(100, EarthenTemplarPlayer, GetPlayerName(EarthenTemplarPlayer) .. " - |cffff0000- Supreme Smasher! - |cffffcc00+100 Gold|r - (100+ units killed.)");                         EarthenTemplarBonusB = false end
+    if DwarvenAxeMasterBonusA then awardOne(200, DwarvenAMPlayer,   GetPlayerName(DwarvenAMPlayer)   .. " - |cffff0000- Slice and Dice! - |cffffcc00+200 Gold|r - (Living Axe killed 30+ units.)");                    DwarvenAxeMasterBonusA = false end
+    if DwarvenAxeMasterBonusB then awardOne(25,  DwarvenAMPlayer,   GetPlayerName(DwarvenAMPlayer)   .. " - |cffff0000- Naturally Aggressive! - |cffffcc00+25 Gold|r - (4 Ranks of Aggression.)");                     DwarvenAxeMasterBonusB = false end
+    if MonkEFBonusA         then awardOne(100, MonkEFPlayer,         GetPlayerName(MonkEFPlayer)         .. " - |cffff0000- One with Chakra! - |cffffcc00+100 Gold|r - (Chakra Burst healed 5+ heroes.)");             MonkEFBonusA         = false end
+    if MonkEFBonusB         then awardOne(150, MonkEFPlayer,         GetPlayerName(MonkEFPlayer)         .. " - |cffff0000- Blistering Speed! - |cffffcc00+150 Gold|r - (Frequent use of Blazing Speed.)");            MonkEFBonusB         = false end
+    if ManAtArmsBonusA      then awardOne(150, HiredWagesPlayer,     GetPlayerName(HiredWagesPlayer)     .. " - |cffff0000- Pay Raise! - |cffffcc00+150 Gold|r - (4 Ranks of Hired Wages.)");                          ManAtArmsBonusA      = false end
+    if ManAtArmsBonusB      then awardOne(100, ManAtArmsPlayer,      GetPlayerName(ManAtArmsPlayer)      .. " - |cffff0000- Hoarse Throat! - |cffffcc00+100 Gold|r - (Frequent Battle Shout.)");                       ManAtArmsBonusB      = false end
+    if MasterOTABonusA      then awardOne(100, MasterOfTheArtPlayer, GetPlayerName(MasterOfTheArtPlayer) .. " - |cffff0000- Bombardier! - |cffffcc00+100 Gold|r - (Blast cast 50+ times.)");                           MasterOTABonusA      = false end
+    if MasterOTABonusB      then awardOne(100, MasterOfTheArtPlayer, GetPlayerName(MasterOfTheArtPlayer) .. " - |cffff0000- Wielder of the Art! - |cffffcc00+100 Gold|r - (Essence Shock 50+ times.)");                MasterOTABonusB      = false end
+    if FeralArchonBonus     then awardOne(100, FeralArchonPlayer,     GetPlayerName(FeralArchonPlayer)     .. " - |cffff0000- Beast Within! - |cffffcc00+100 Gold|r - (Tantrum slew multiple enemies.)");               FeralArchonBonus     = false end
+    if FeralArchonBonusB    then awardOne(125, FeralArchonPlayer,     GetPlayerName(FeralArchonPlayer)     .. " - |cffff0000- Predator! - |cffffcc00+125 Gold|r - (Got the killing blow on a boss.)");                  FeralArchonBonusB    = false end
+    if HumanEngineerBonusA  then awardOne(150, HumanEngineerPlayer,  GetPlayerName(HumanEngineerPlayer)  .. " - |cffff0000- Master Crafter! - |cffffcc00+150 Gold|r - (Built 10+ structures.)");                       HumanEngineerBonusA  = false end
+    if HumanEngineerBonusB  then awardOne(200, HumanEngineerPlayer,  GetPlayerName(HumanEngineerPlayer)  .. " - |cffff0000- Violent Engineer! - |cffffcc00+200 Gold|r - (Killed 50+ units as engineer.)");             HumanEngineerBonusB  = false end
+    if SunSoulBonusA        then awardOne(100, SunSoulPlayer,        GetPlayerName(SunSoulPlayer)        .. " - |cffff0000- Solar Guard! - |cffffcc00+100 Gold|r - (Frequent Solar Barrier.)");                        SunSoulBonusA        = false end
+    if SunSoulBonusB        then awardOne(100, SunSoulPlayer,        GetPlayerName(SunSoulPlayer)        .. " - |cffff0000- Lightcaster! - |cffffcc00+100 Gold|r - (Frequent sunbeam.)");                              SunSoulBonusB        = false end
+    if SunSoulPenalty       then awardOne(-400, SunSoulPlayer,       GetPlayerName(SunSoulPlayer)        .. " - |cffff0000- Incinerated an Ally... - |cffffcc00-400 Gold|r - (Killed an ally with sunbeam.)");          SunSoulPenalty       = false end
+    if PaladinJusticeBonusA then awardOne(175, PaladinJusticePlayer, GetPlayerName(PaladinJusticePlayer) .. " - |cffff0000- Shining Beacon! - |cffffcc00+175 Gold|r - (Saved an ally from death.)");                   PaladinJusticeBonusA = false end
+    if PaladinJusticeBonusB then awardOne(100, PaladinJusticePlayer, GetPlayerName(PaladinJusticePlayer) .. " - |cffff0000- Crusader! - |cffffcc00+100 Gold|r - (100+ units killed.)");                                PaladinJusticeBonusB = false end
+    if DwarvenRFBonusA      then awardOne(25,  DwarvenRFPlayer,      GetPlayerName(DwarvenRFPlayer)      .. " - |cffff0000- Titan's Stamina! - |cffffcc00+25 Gold|r - (4 Ranks of Dwarven Stamina.)");                 DwarvenRFBonusA      = false end
+    if DwarvenRFBonusB      then awardOne(125, DwarvenRFPlayer,      GetPlayerName(DwarvenRFPlayer)      .. " - |cffff0000- Fearful Presence! - |cffffcc00+125 Gold|r - (Caused 15+ units to flee.)");                 DwarvenRFBonusB      = false end
+    if DiscipleBonusA       then awardOne(75,  DisciplePlayer,       GetPlayerName(DisciplePlayer)       .. " - |cffff0000- Aura of Grace! - |cffffcc00+75 Gold|r - (Frequent Mass Restore.)");                        DiscipleBonusA       = false end
+    if DiscipleBonusB       then awardOne(200, DisciplePlayer,       GetPlayerName(DisciplePlayer)       .. " - |cffff0000- Cheat Death! - |cffffcc00+200 Gold|r - (Rescued an ally with Death Ward.)"); GraceBonusObtained = true; DiscipleBonusB = false end
+    if ArcaneArcherBonusA   then awardOne(50,  ArcaneArcherPlayer,   GetPlayerName(ArcaneArcherPlayer)   .. " - |cffff0000- Power Shot! - |cffffcc00+50 Gold|r - (4 Ranks of Far Shot.)");                             ArcaneArcherBonusA   = false end
+    if ArcaneArcherBonusB   then awardOne(100, ArcaneArcherPlayer,   GetPlayerName(ArcaneArcherPlayer)   .. " - |cffff0000- Sniper! - |cffffcc00+100 Gold|r - (Frequent Eagle Arrow.)");                               ArcaneArcherBonusB   = false end
+    if AxeBrotherBonusA     then awardOne(100, AxeBrotherPlayer,     GetPlayerName(AxeBrotherPlayer)     .. " - |cffff0000- Whirling Dervish! - |cffffcc00+100 Gold|r - (Frequent Whirlwind Attack.)");                AxeBrotherBonusA     = false end
+    if AxeBrotherBonusB     then awardOne(100, AxeBrotherPlayer,     GetPlayerName(AxeBrotherPlayer)     .. " - |cffff0000- Savage Fighter! - |cffffcc00+100 Gold|r - (50+ Decimate kills.)");                         AxeBrotherBonusB     = false end
+    if CentaurDruidBonusA   then awardOne(100, CentaurDruidPlayer,   GetPlayerName(CentaurDruidPlayer)   .. " - |cffff0000- Cultivator! - |cffffcc00+100 Gold|r - (5+ treants created.)");                             CentaurDruidBonusA   = false end
+    if CentaurDruidBonusB   then awardOne(100, CentaurDruidPlayer,   GetPlayerName(CentaurDruidPlayer)   .. " - |cffff0000- Nature's Wrath! - |cffffcc00+100 Gold|r - (Treants killed 50+ units.)");                   CentaurDruidBonusB   = false end
+    if ClericElvenWordBonusA then awardOne(150, ClericEWPlayer,      GetPlayerName(ClericEWPlayer)       .. " - |cffff0000- Mender! - |cffffcc00+150 Gold|r - (Frequent Regrowth healing.)");                          ClericElvenWordBonusA = false end
+    if ClericElvenWordBonusB then awardOne(100, ClericEWPlayer,      GetPlayerName(ClericEWPlayer)       .. " - |cffff0000- Mistress of Elven Heart! - |cffffcc00+100 Gold|r - (Absorbed a spell.)");                  ClericElvenWordBonusB = false end
+    if CrestedDrakeBonusA   then awardOne(100, CrestedDrakePlayer,   GetPlayerName(CrestedDrakePlayer)   .. " - |cffff0000- Firebreather! - |cffffcc00+100 Gold|r - (Frequent Flame Wreath.)");                         CrestedDrakeBonusA   = false end
+    if CrestedDrakeBonusB   then awardOne(50,  CrestedDrakePlayer,   GetPlayerName(CrestedDrakePlayer)   .. " - |cffff0000- Fangterror! - |cffffcc00+50 Gold|r - (4 Ranks of Drakefang.)");                            CrestedDrakeBonusB   = false end
+    if HEBardBonusA         then awardOne(100, BardPlayer,           GetPlayerName(BardPlayer)           .. " - |cffff0000- Harmonic Healing! - |cffffcc00+100 Gold|r - (Frequent Melody of Mending.)");              HEBardBonusA         = false end
+    if HEBardBonusB         then awardOne(150, BardPlayer,           GetPlayerName(BardPlayer)           .. " - |cffff0000- Sower of Chaos! - |cffffcc00+150 Gold|r - (50+ units confused.)");                        HEBardBonusB         = false end
+
+    -- ── Upkeep_2 equivalents (war3map.j 7369-7408) ────────────────────────────
+    -- Reckless Pyromancer penalty (MajinPenalty, war3map.j 7370-7376)
+    if MajinPenalty and MajinPlayer then
+        DisplayTimedTextToForce(GetPlayersAll(), 10.0,
+            GetPlayerName(MajinPlayer) .. " - |cffff0000- Incinerated an ally... - |cffffcc00-400 Gold|r - (Killed an allied hero.)")
+        AdjustPlayerStateBJ(-400, MajinPlayer, PLAYER_STATE_RESOURCE_GOLD)
+        MajinPenalty = false
+    end
+    -- Elven Sharpshooter: survived L1-10 without dying (war3map.j 7377-7382)
+    if SharpshooterBonusA and CurrentLevel == 10 then
+        local h02NGroup = GetUnitsOfTypeIdAll(FourCC('H02N'))
+        local ss = GroupPickRandomUnit(h02NGroup)
+        if ss then
+            local ssPl = GetOwningPlayer(ss)
+            DisplayTimedTextToForce(GetPlayersAll(), 10.0,
+                GetPlayerName(ssPl) .. " - |cffff0000- Smart Survivalist - |cffffcc00+200 Gold|r - (Survived the first 10 levels.)")
+            AdjustPlayerStateBJ(200, ssPl, PLAYER_STATE_RESOURCE_GOLD)
+            TotalBonusGold = TotalBonusGold + 200
+        end
+        DestroyGroup(h02NGroup)
+    end
+    -- Elven Sharpshooter: Sniper's Mark kills (war3map.j 7383-7388)
+    if SharpshooterBonusB and SharpshooterPlayer then
+        awardOne(200, SharpshooterPlayer,
+            GetPlayerName(SharpshooterPlayer) .. " - |cffff0000- Shoot to Kill - |cffffcc00+200 Gold|r - (10 Sniper's Mark kills.)")
+        SharpshooterBonusB = false
+    end
+    -- Master of the Well: restore 50% mana to Fountain (war3map.j 7407, feat effect)
+    if MasterOfWellActive and unit_h010 then
+        SetUnitManaBJ(unit_h010, GetUnitStateSwap(UNIT_STATE_MANA, unit_h010)
+            + GetUnitStateSwap(UNIT_STATE_MAX_MANA, unit_h010) * 0.50)
+    end
+
+    -- ── Applied Knowledge feat (war3map.j 15850-15857) ────────────────────────
     if AppliedKnowledgeHero then
         local xp = CurrentLevel * 10
         AddHeroXP(AppliedKnowledgeHero, xp, true)
         DisplayTextToForce(GetPlayersAll(),
             "|cff00ccff+" .. tostring(xp) .. " EXP! (Applied Knowledge)|r")
-    end
-    -- Master of the Well feat: restore 50% mana to the Fountain at level end (war3map.j 16521-16528)
-    if MasterOfWellActive and unit_h010 then
-        SetUnitManaBJ(unit_h010, GetUnitStateSwap(UNIT_STATE_MANA, unit_h010)
-            + GetUnitStateSwap(UNIT_STATE_MAX_MANA, unit_h010) * 0.50)
     end
 end
 
