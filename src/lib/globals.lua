@@ -328,3 +328,49 @@ HEBardBonusA        = false;  HEBardBonusB        = false;   BardPlayer         
 RogueOTDBonusA      = false;  RogueOTDBonusB      = false;   RogueOTDBonusC      = false
 SharpshooterBonusB  = false;  SharpshooterPlayer  = nil
 MajinPlayer         = nil  -- set when Reckless Pyromancer kills an ally with a spell
+RogueOTDPlayer      = nil
+
+-- ── Achievement detection counters (achievements.lua) ────────────────────────
+-- Incremented by class ability triggers; thresholds checked in RegisterAchievementTriggers.
+ClericSmallFolkHealBonusTotal  = 0   -- times OTSF healed others with A006
+ClericSmallFolkSlingshotBonus  = 0   -- times OTSF used Flurry of Slingstones (A005)
+LivingAxeKills                 = 0   -- kills by Living Axe (h00A/h009/h008)
+FlurryCount                    = 0   -- times Monk used Flurry of Blows (A03V)
+AssassinateCount               = 0   -- times Rogue cast Assassinate; incremented by spell trigger
+BlastCast                      = 0   -- times MoTA cast Blast (A00K)
+EssenceShockCast               = 0   -- times MoTA cast Essence Shock (A00L)
+TantrumCast                    = 0   -- times Feral Archon cast Tantrum (A00X)
+TotalEngyKills                 = 0   -- units killed by H00F (Engineer hero)
+TotalETKills                   = 0   -- units killed by H00S (Earthen Templar)
+BattleShoutCount               = 0   -- times Man-at-Arms used Battle Shout (A024)
+SolarCount                     = 0   -- times Sun Soul used Solar Barrier (A02G)
+SunbeamCount                   = 0   -- times Sun Soul used Sunbeam (A02F)
+TotalPoJKills                  = 0   -- units killed by H01J (Paladin of Justice)
+DwarvenStamina                 = 0   -- ranks of Dwarven Stamina (A037) learned
+DiscipleMRCount                = 0   -- times Disciple used Moonbeam Rejuvenation (A039)
+FarShotTotal                   = 0   -- ranks of Far Shot (A03J) learned
+EagleArrowTotal                = 0   -- times Arcane Archer used Eagle Arrow (A03I)
+WhirlwindAttack                = 0   -- times Axe Brother used Whirlwind Attack (A03M)
+DecimateCount                  = 0   -- Decimate procs; incremented by Decimate proc trigger
+SavageFighter                  = false  -- latched true once Axe Brother Savage Fighter fires
+TotalPlantKills                = 0   -- enemy units killed by Centaur Druid treant structures
+ElvenBlessingCount             = 0   -- times Cleric of Elven Word used Elven Blessing (A05C)
+FlameWreathCount               = 0   -- times Crested Drake used Flame Wreath (A05F)
+DrakeFangCount                 = 0   -- ranks of Drakefang (A05H) learned
+SniperMarkTarget               = nil -- unit marked by Sniper's Mark; set by that ability trigger
+SniperMarkKills                = 0   -- times Sharpshooter killed a Sniper's Mark target
+Lv5SpellBonus                  = 0   -- spells cast at P9 Knights in level 5
+
+-- ── Exposed trigger handles (set by RegisterAchievementTriggers) ─────────────
+trg_Level_1_Bonus         = nil
+trg_Level_2_Bonus         = nil
+trg_Level_2_Bonus_Add     = nil
+trg_Level_3_Bonus         = nil
+trg_Level_4_Bonus         = nil
+trg_Level_5_Bonus         = nil
+trg_EarthenTemplarRageOfEarth  = nil  -- call when h011 summons are created
+trg_AxeBrotherSavageFighter    = nil  -- call when Decimate procs
+trg_ManAtArmsPayRaise          = nil  -- call when WageTotal updates
+trg_RogueApprenticeAssassin    = nil  -- disabled; enabled when Rogue class active
+trg_RogueVeteranAssassin       = nil
+trg_RogueMasterAssassin        = nil

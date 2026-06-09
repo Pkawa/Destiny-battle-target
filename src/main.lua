@@ -48,6 +48,9 @@ AddModeSelectionLabels()
 -- Register per-level bonus tracking triggers (halfway markers + Stalwart Defender)
 RegisterLevelTriggers()
 
+-- Register class achievement detection + level challenge bonus triggers
+RegisterAchievementTriggers()
+
 -- Register the hero death loop: gold loss, death tracking, near-defeat music, defeat condition
 RegisterHeroDeathTriggers()
 

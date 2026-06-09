@@ -1306,6 +1306,20 @@ StartLevel = function(n)
     DisplayTimedTextToForce(GetPlayersAll(), 20.0, data.intro)
     TriggerSleepAction(1.0)
 
+    -- Enable per-level challenge bonus trigger (achievements.lua, JASS 9167-9348)
+    if     n == 1 then
+        if trg_Level_1_Bonus     then EnableTrigger(trg_Level_1_Bonus) end
+    elseif n == 2 then
+        if trg_Level_2_Bonus     then EnableTrigger(trg_Level_2_Bonus) end
+        if trg_Level_2_Bonus_Add then EnableTrigger(trg_Level_2_Bonus_Add) end
+    elseif n == 3 then
+        if trg_Level_3_Bonus     then EnableTrigger(trg_Level_3_Bonus) end
+    elseif n == 4 then
+        if trg_Level_4_Bonus     then EnableTrigger(trg_Level_4_Bonus) end
+    elseif n == 5 then
+        if trg_Level_5_Bonus     then EnableTrigger(trg_Level_5_Bonus) end
+    end
+
     spawnLevel(data)
     if data.prisoners then spawnPrisoners() end
     if data.setup then data.setup() end
