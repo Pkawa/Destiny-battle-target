@@ -38,9 +38,12 @@ local ALL_FEAT_ITEMS = {
 }
 
 -- Register a feat that grants a stat (or armor) bonus every hero level-up.
-local function registerStatFeat(itemCode, featName, applyFn)
+-- `desc` is shown in the pick message so players know the effect applies on level-up
+-- (matches the original's "(+2 STR per Level Up.)" wording) — not instantly.
+local function registerStatFeat(itemCode, featName, desc, applyFn)
     featRegistry[FourCC(itemCode)] = {
         name = featName,
+        desc = desc,
         onPick = function(hero)
             statLevelHeroes[hero] = applyFn
         end,
@@ -48,11 +51,11 @@ local function registerStatFeat(itemCode, featName, applyFn)
 end
 
 -- Extra Strong / Fast / Smart — +2 of a stat per level (war3map.j 15046-15217)
-registerStatFeat('I02A', "Extra Strong", function(h) ModifyHeroStat(bj_HEROSTAT_STR, h, bj_MODIFYMETHOD_ADD, 2) end)
-registerStatFeat('I02B', "Extra Fast",   function(h) ModifyHeroStat(bj_HEROSTAT_AGI, h, bj_MODIFYMETHOD_ADD, 2) end)
-registerStatFeat('I02C', "Extra Smart",  function(h) ModifyHeroStat(bj_HEROSTAT_INT, h, bj_MODIFYMETHOD_ADD, 2) end)
+registerStatFeat('I02A', "Extra Strong", "+2 STR per Level Up",   function(h) ModifyHeroStat(bj_HEROSTAT_STR, h, bj_MODIFYMETHOD_ADD, 2) end)
+registerStatFeat('I02B', "Extra Fast",   "+2 AGI per Level Up",   function(h) ModifyHeroStat(bj_HEROSTAT_AGI, h, bj_MODIFYMETHOD_ADD, 2) end)
+registerStatFeat('I02C', "Extra Smart",  "+2 INT per Level Up",   function(h) ModifyHeroStat(bj_HEROSTAT_INT, h, bj_MODIFYMETHOD_ADD, 2) end)
 -- Iron Skin — +1 armor per level (war3map.j 15220-15266)
-registerStatFeat('I02V', "Iron Skin",    function(h) BlzSetUnitArmor(h, BlzGetUnitArmor(h) + 1) end)
+registerStatFeat('I02V', "Iron Skin",    "+1 Armor per Level Up", function(h) BlzSetUnitArmor(h, BlzGetUnitArmor(h) + 1) end)
 
 -- Familiar — spawn a random animal companion (war3map.j 14428-14456)
 featRegistry[FourCC('I03T')] = {
@@ -107,7 +110,8 @@ local function OnFeatItemPickup()
             GetPlayerName(owner) .. " has chosen a feat.")
     else
         DisplayTextToForce(GetPlayersAll(),
-            GetPlayerName(owner) .. " has selected the \"" .. entry.name .. "\" Feat.")
+            GetPlayerName(owner) .. " has selected the \"" .. entry.name .. "\" Feat."
+            .. (entry.desc and (" (" .. entry.desc .. ")") or ""))
     end
 
     if entry.onPick then entry.onPick(hero) end

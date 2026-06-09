@@ -38,8 +38,8 @@ local function AddModeSelectionLabels()
     end
     tag("|cff00ff00Story Mode|r",      rct.StoryMode,         0.0, 100.0, 0.0)
     tag("|cffffcc00Battle Mode|r",     rct.BattleMode,        100.0, 100.0, 0.0)
-    tag("|cff00ccffSolo Mode|r",       rct.SoloMode,          0.0, 100.0, 100.0)
-    tag("|cffaaaaaa(1 player only)|r", rct.SoloMode,          66.0, 66.0, 66.0)
+    -- Solo title + subtitle as one two-line tag so they don't overlap (same rect center).
+    tag("|cff00ccffSolo Mode|r\n|cffaaaaaa(1 player only)|r", rct.SoloMode, 0.0, 100.0, 100.0)
     tag("|cffaaaaaa→ Walk your wisp into a circle to choose|r",
         rct.ModeTypeSelection, 80.0, 80.0, 80.0)
 end
