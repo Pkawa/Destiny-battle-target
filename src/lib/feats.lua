@@ -38,24 +38,28 @@ local ALL_FEAT_ITEMS = {
 }
 
 -- Register a feat that grants a stat (or armor) bonus every hero level-up.
--- `desc` is shown in the pick message so players know the effect applies on level-up
--- (matches the original's "(+2 STR per Level Up.)" wording) — not instantly.
-local function registerStatFeat(itemCode, featName, desc, applyFn)
+-- The original applies these via a hidden level-up trigger with no ability, so nothing
+-- showed on the hero. We additionally grant a cosmetic display passive (`displayAbil`,
+-- authored in objediting/main.lua) so the feat appears as a command-card skill, and the
+-- `desc` is shown in the pick message (matches the original's "(+2 STR per Level Up.)").
+local function registerStatFeat(itemCode, featName, desc, displayAbil, applyFn)
+    local abil = FourCC(displayAbil)
     featRegistry[FourCC(itemCode)] = {
         name = featName,
         desc = desc,
         onPick = function(hero)
-            statLevelHeroes[hero] = applyFn
+            UnitAddAbilityBJ(abil, hero)        -- command-card display passive (objediting)
+            statLevelHeroes[hero] = applyFn     -- actual +stat applied on each level-up
         end,
     }
 end
 
 -- Extra Strong / Fast / Smart — +2 of a stat per level (war3map.j 15046-15217)
-registerStatFeat('I02A', "Extra Strong", "+2 STR per Level Up",   function(h) ModifyHeroStat(bj_HEROSTAT_STR, h, bj_MODIFYMETHOD_ADD, 2) end)
-registerStatFeat('I02B', "Extra Fast",   "+2 AGI per Level Up",   function(h) ModifyHeroStat(bj_HEROSTAT_AGI, h, bj_MODIFYMETHOD_ADD, 2) end)
-registerStatFeat('I02C', "Extra Smart",  "+2 INT per Level Up",   function(h) ModifyHeroStat(bj_HEROSTAT_INT, h, bj_MODIFYMETHOD_ADD, 2) end)
+registerStatFeat('I02A', "Extra Strong", "+2 STR per Level Up",   'fea1', function(h) ModifyHeroStat(bj_HEROSTAT_STR, h, bj_MODIFYMETHOD_ADD, 2) end)
+registerStatFeat('I02B', "Extra Fast",   "+2 AGI per Level Up",   'fea2', function(h) ModifyHeroStat(bj_HEROSTAT_AGI, h, bj_MODIFYMETHOD_ADD, 2) end)
+registerStatFeat('I02C', "Extra Smart",  "+2 INT per Level Up",   'fea3', function(h) ModifyHeroStat(bj_HEROSTAT_INT, h, bj_MODIFYMETHOD_ADD, 2) end)
 -- Iron Skin — +1 armor per level (war3map.j 15220-15266)
-registerStatFeat('I02V', "Iron Skin",    "+1 Armor per Level Up", function(h) BlzSetUnitArmor(h, BlzGetUnitArmor(h) + 1) end)
+registerStatFeat('I02V', "Iron Skin",    "+1 Armor per Level Up", 'fea4', function(h) BlzSetUnitArmor(h, BlzGetUnitArmor(h) + 1) end)
 
 -- Familiar — spawn a random animal companion (war3map.j 14428-14456)
 featRegistry[FourCC('I03T')] = {
@@ -69,6 +73,58 @@ featRegistry[FourCC('I03T')] = {
         FamiliarHero = hero
     end,
 }
+
+-- ── Ability feats: grant the hero a passive/active skill (war3map.j 14730-16118) ──
+-- These are the feats that "appear as a skill" on the command card. Each does
+-- UnitAddAbilityBJ(<ability>, hero) in the original; the item token is consumed.
+local function registerAbilityFeat(itemCode, featName, desc, abilityCode)
+    local abil = FourCC(abilityCode)
+    featRegistry[FourCC(itemCode)] = {
+        name = featName, desc = desc,
+        onPick = function(hero) UnitAddAbilityBJ(abil, hero) end,
+    }
+end
+registerAbilityFeat('I02M', "Acrobat",         "+10% Evasion",             'A063')
+registerAbilityFeat('I02L', "Fleetfooted",     "Hero moves faster",        'A078')
+registerAbilityFeat('I02P', "Weapon Focus",    "Never misses",             'A066')
+registerAbilityFeat('I03U', "Snakeblood",      "Reflect 50% of damage",    'A064')
+registerAbilityFeat('I02S', "Weapon Finesse",  "+30% Attack Speed",        'A079')
+registerAbilityFeat('I02G', "Spell Eater",     "Blocks harmful spells",    'A05X')
+registerAbilityFeat('I02N', "First Aid",       "Learns a healing spell",   'A060')
+registerAbilityFeat('I02H', "Magic Prodigy",   "+50% Mana Regen",          'A05Y')
+registerAbilityFeat('I02I', "Troll Blood",     "+5 HP/sec Regen",          'A05Z')
+registerAbilityFeat('I02E', "Numb Body",       "Damage Soak 3/-",          'A05W')
+registerAbilityFeat('I02K', "Combat Mastery",  "Chance to critically hit", 'A062')
+registerAbilityFeat('I02J', "Charismatic",     "Aura of Leadership",       'A061')
+registerAbilityFeat('I04U', "Natural Balance", "-25% ranged damage taken", 'A095')
+
+-- Wealthy (I02F, war3map.j 14730) — passive bonus-gold ability + a one-time 600 gold.
+featRegistry[FourCC('I02F')] = {
+    name = "Wealthy", desc = "+600 Gold",
+    onPick = function(hero)
+        UnitAddAbilityBJ(FourCC('A05V'), hero)
+        AdjustPlayerStateBJ(600, GetOwningPlayer(hero), PLAYER_STATE_RESOURCE_GOLD)
+    end,
+}
+
+-- Jack of All Trades (I03V, war3map.j 14932) — +8 to all stats immediately.
+featRegistry[FourCC('I03V')] = {
+    name = "Jack of All Trades", desc = "+8 to all stats",
+    onPick = function(hero)
+        ModifyHeroStat(bj_HEROSTAT_STR, hero, bj_MODIFYMETHOD_ADD, 8)
+        ModifyHeroStat(bj_HEROSTAT_AGI, hero, bj_MODIFYMETHOD_ADD, 8)
+        ModifyHeroStat(bj_HEROSTAT_INT, hero, bj_MODIFYMETHOD_ADD, 8)
+    end,
+}
+
+-- ── Flag feats: set a global the (already-ported) consuming system reads ──
+local function registerFlagFeat(itemCode, featName, desc, applyFn)
+    featRegistry[FourCC(itemCode)] = { name = featName, desc = desc, onPick = applyFn }
+end
+registerFlagFeat('I02Q', "Miser",        "No gold lost on death",      function(h) MiserPlayer = GetOwningPlayer(h) end)
+registerFlagFeat('I07Y', "Artificier",   "Better artifact odds",       function()  ArtificierFeatOn = true end)
+registerFlagFeat('I07Z', "Meteorologist","50% chance to deny bad weather", function() MeteorlogistFeatOn = true end)
+registerFlagFeat('I09G', "Champion of the Fallen", "Last hero alive recovers full HP", function() ChampionOfTheFallenFeat = true end)
 
 -- Register every remaining feat item as a generic (no-effect-yet) feat so the
 -- pick flow still works. Individual effects to be filled in during combat phase.

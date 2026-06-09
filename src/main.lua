@@ -51,6 +51,9 @@ RegisterLevelTriggers()
 -- Register the hero death loop: gold loss, death tracking, near-defeat music, defeat condition
 RegisterHeroDeathTriggers()
 
+-- Register the loot drop system (enemies drop rarity-rolled Lv1 items on death)
+RegisterItemDropTriggers()
+
 -- Keep fog of war ENABLED (like the original). Reveal only the mode-selection area now
 -- so the menu is navigable; the main game area is revealed at game start (RevealGameArea
 -- in BeginningStart2), and distant areas (islands, boss arenas) stay fogged until their

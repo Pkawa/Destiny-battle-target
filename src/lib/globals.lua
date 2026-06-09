@@ -78,6 +78,7 @@ AllPrisonersAlive       = false
 CloseCall               = false
 DeathWardedTarget       = nil    -- hero protected from Gold Loss by Death Ward (set by that ability)
 ChampionOfTheFallenFeat = false  -- feat: revive Player(11) hero to full at near-defeat
+MeteorlogistFeatOn      = false  -- feat: 50% chance to deny bad weather (weather system not yet ported)
 
 -- Economy
 CurrentGoldDeathUpgrade = 0
@@ -95,6 +96,7 @@ CurrentItemLevelDrops   = 1
 RandomItemChance        = 0
 ItemDrop                = 0
 ItemDropTotal           = 50
+ArtificierFeatOn        = false  -- Artificier class: shifts loot rarity odds by +1 (class not yet ported)
 TotalScrollDrop         = 200
 ScrollDrop              = 0
 ScrollNumDrop           = 0
