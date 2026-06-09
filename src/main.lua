@@ -48,6 +48,9 @@ AddModeSelectionLabels()
 -- Register per-level bonus tracking triggers (halfway markers + Stalwart Defender)
 RegisterLevelTriggers()
 
+-- Register the hero death loop: gold loss, death tracking, near-defeat music, defeat condition
+RegisterHeroDeathTriggers()
+
 -- Keep fog of war ENABLED (like the original). Reveal only the mode-selection area now
 -- so the menu is navigable; the main game area is revealed at game start (RevealGameArea
 -- in BeginningStart2), and distant areas (islands, boss arenas) stay fogged until their

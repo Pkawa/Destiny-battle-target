@@ -76,6 +76,8 @@ PlayerTotalDeaths       = 0
 HeroesDeadThisRound     = 0
 AllPrisonersAlive       = false
 CloseCall               = false
+DeathWardedTarget       = nil    -- hero protected from Gold Loss by Death Ward (set by that ability)
+ChampionOfTheFallenFeat = false  -- feat: revive Player(11) hero to full at near-defeat
 
 -- Economy
 CurrentGoldDeathUpgrade = 0
