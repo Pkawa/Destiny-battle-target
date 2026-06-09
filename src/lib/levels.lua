@@ -8,6 +8,7 @@
 -- skills, level-specific enemy AI). Levels 11-31 are added by extending LevelData.
 
 local P9 = Player(9)
+local underAttackTrg = nil  -- "town under attack" warning; re-armed each level by BonusReset
 
 -- lane key -> spawn rect. 'A'/'B'/'C' are shorthand for SpawnA/B/C; any other key is
 -- looked up directly in rct (e.g. 'HellSpawn', 'CaravanPathA'). Resolved at runtime.
@@ -68,6 +69,7 @@ function BonusReset()
     SpeedyVictory             = true
     StalwartDefender          = true
     PlayerTotalDeathsForRound = 0
+    if underAttackTrg then EnableTrigger(underAttackTrg) end  -- re-arm warning (war3map.j 6420)
 end
 
 -- ─── Bonuses & Upkeep (universal bonuses; per-class payouts pending — Achievements.md) ──
@@ -161,7 +163,7 @@ end
 -- Spells (Lackeys ANsq, Fury/Stampede AHtc, Spire ANst) are granted here; their
 -- cast-AI is a later port — for now the boss is a high-level melee threat.
 local function setupLevel10Boss()
-    BossMusic    = true
+    StartBossMusic()   -- BossMusic1.mp3 loop (war3map.j 20323-20325)
     GoblinSlayer = true
     local grp = GetUnitsOfTypeIdAll(FourCC('O001'))
     ForGroup(grp, function()
@@ -364,6 +366,8 @@ StartLevel = nil
 local function onLevelVictory(data, levelIndex)
     MusicOn     = false
     BossMusic   = false
+    StopAllMusic()        -- immediately silence boss track on victory
+    StopLevelMusic()      -- silence the level background track too
     LevelBeaten = true
     PlaySoundBJ(snd.RoundClear)
     ThingsToDoImmediatelyFollowingVictory()
@@ -442,7 +446,8 @@ StartLevel = function(n)
     patrolEnemiesToBase()
     StartFastVictoriesTimer()
     MusicOn = true
-    CurrentTrackMusic = data.track or 0
+    if data.track then CurrentTrackMusic = data.track end  -- nil = keep previous (e.g. L6 miniboss)
+    PlaySoundBJ(snd.SlowRezzSound)   -- per-level reinforcement cue (war3map.j level actions)
 
     TriggerSleepAction(0.75)
     if data.victory.type == 'boss' then
@@ -482,5 +487,22 @@ function RegisterLevelTriggers()
     end))
     TriggerAddAction(trgStalwart, function()
         StalwartDefender = false
+    end)
+
+    -- "Town under attack!" — first enemy to reach the base each level pings the
+    -- minimap, sounds the horn, and warns the players (war3map.j 30002-30022).
+    -- Fires once per level (disables itself); BonusReset re-arms it.
+    underAttackTrg = CreateTrigger()
+    TriggerRegisterEnterRectSimple(underAttackTrg, rct.AreaToDefend)
+    TriggerAddCondition(underAttackTrg, Condition(function()
+        return GetOwningPlayer(GetEnteringUnit()) == P9
+    end))
+    TriggerAddAction(underAttackTrg, function()
+        DisableTrigger(underAttackTrg)
+        local loc = GetUnitLoc(GetEnteringUnit())
+        PingMinimapLocForForce(GetPlayersAll(), loc, 5.0)
+        RemoveLocation(loc)
+        PlaySoundBJ(snd.HordeSound2)
+        DisplayTimedTextToForce(GetPlayersAll(), 3.0, "|cffff0000Your town is under attack!|r")
     end)
 end

@@ -61,11 +61,25 @@ function InitSounds()
     SetSoundVolume(snd.EpicEventSound, 127)
     SetSoundPitch(snd.EpicEventSound, 1.0)
 
+    -- Gameplay background track (the only full-length non-boss track in the map) — war3map.j 3717
+    snd.SeymourBattle = CreateSound("war3mapImported/85 - Seymour Battle_chunk_1 (2).mp3", false, false, false, 0, 0, "DefaultEAXON")
+    SetSoundDuration(snd.SeymourBattle, 113266)
+    SetSoundChannel(snd.SeymourBattle, 0)
+    SetSoundVolume(snd.SeymourBattle, 110)
+    SetSoundPitch(snd.SeymourBattle, 1.0)
+
     snd.Courageous = CreateSound("war3mapImported/27 Courageous (Original Version) 1.mp3", false, false, false, 0, 0, "DefaultEAXON")
     SetSoundDuration(snd.Courageous, 10000)
     SetSoundChannel(snd.Courageous, 0)
     SetSoundVolume(snd.Courageous, 100)
     SetSoundPitch(snd.Courageous, 1.0)
+
+    -- "Town under attack" horn (enemy reaches the base) — war3map.j 3240
+    snd.HordeSound2 = CreateSound("war3mapImported/HordeSound2.wav", false, false, false, 10, 10, "DefaultEAXON")
+    SetSoundDuration(snd.HordeSound2, 1208)
+    SetSoundChannel(snd.HordeSound2, 0)
+    SetSoundVolume(snd.HordeSound2, 127)
+    SetSoundPitch(snd.HordeSound2, 1.0)
 
     -- Engine sounds used in UI / effects
     snd.CreepAggroWhat1 = CreateSound("Sound\\Creep\\CreepAggroWhat1.wav", false, false, false, 10, 10, "SpellsEAX")

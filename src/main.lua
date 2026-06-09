@@ -17,21 +17,13 @@ CreateAllUnits()
 -- Register T+6s and T+10s array population timers (hero pool, tarot, locations)
 RegisterHeroPoolTimers()
 
--- Disable built-in map music so our system controls it
-StopMusicBJ(false)
-
--- Start intro music loop
-local function PlayIntroMusicLoop()
-    if not IntroMusicOn then return end
-    StartSound(snd.IntroMusic)
-    TriggerSleepAction(156.0)
-    StopSoundBJ(snd.IntroMusic, true)
-    PlayIntroMusicLoop()
-end
-
-local trgIntro = CreateTrigger()
-TriggerAddAction(trgIntro, PlayIntroMusicLoop)
-ConditionalTriggerExecute(trgIntro)
+-- Kill the WC3 stock ambient playlist (SetMapMusic from the generated main()) so it
+-- can't bleed under our custom tracks, then start the looping intro music.
+SilenceAmbientMusic()
+StartIntroMusic()
+-- Start the per-level background-music driver. It idles (MusicOn = false) during the
+-- menu and while boss music plays, and plays the level track once a wave begins.
+StartLevelMusic()
 
 -- Register hero selection triggers (mode, difficulty, pick, feats)
 RegisterHeroSelectionTriggers()

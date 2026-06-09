@@ -30,12 +30,13 @@ local function CountHumanPlayers()
     return n
 end
 
--- Stops all custom music tracks
-local function StopAllMusic()
-    StopSoundBJ(snd.ChapterBoss, true)
-    StopSoundBJ(snd.BossMusic1, true)
-    StopSoundBJ(snd.NearDefeatMusic, true)
-    StopSoundBJ(snd.IntroMusic, true)
+-- StopAllMusic() is now provided globally by lib/music.lua.
+
+-- Ends the intro music for good: clear the flag (stops the loop re-firing) and stop
+-- the currently-playing intro sound immediately. Called when a game mode is chosen.
+local function EndIntroMusic()
+    IntroMusicOn = false
+    StopAllMusic()
 end
 
 -- Spawn a wisp for a player at a rect
@@ -147,7 +148,7 @@ local function OnSoloMode(trigger)
     RemoveUnit(entering)
     SpawnBlueCompanion()
     TotalPlaying = CountHumanPlayers()
-    StopMusicBJ(false)
+    EndIntroMusic()
     RevealGameArea()
     DifficultyModifier = DifficultyModifier - 1
     TriggerSleepAction(2.0)
@@ -205,7 +206,7 @@ local function OnRandomMode(trigger)
     if GetPlayerSlotState(Player(10)) == PLAYER_SLOT_STATE_PLAYING then
         TotalPlaying = TotalPlaying - 1
     end
-    StopMusicBJ(false)
+    EndIntroMusic()
     PauseAllUnitsBJ(true)
     SetSkyModel("Environment\\Sky\\LordaeronSummerSky\\LordaeronSummerSky.mdl")
     SetPlayerFlagBJ(PLAYER_STATE_GIVES_BOUNTY, true, Player(9))
@@ -234,7 +235,7 @@ local function OnPickMode(trigger)
     if GetPlayerSlotState(Player(10)) == PLAYER_SLOT_STATE_PLAYING then
         TotalPlaying = TotalPlaying - 1
     end
-    StopMusicBJ(false)
+    EndIntroMusic()
     SetSkyModel("Environment\\Sky\\LordaeronSummerSky\\LordaeronSummerSky.mdl")
     SetPlayerFlagBJ(PLAYER_STATE_GIVES_BOUNTY, true, Player(9))
 
