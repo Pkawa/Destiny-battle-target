@@ -54,6 +54,12 @@ RegisterHeroDeathTriggers()
 -- Register the loot drop system (enemies drop rarity-rolled Lv1 items on death)
 RegisterItemDropTriggers()
 
+-- Register loot-box purchases (buy a box token from a base shop -> random pool item)
+RegisterPurchaseTriggers()
+
+-- Register misc/flavor systems (hero level-up floaters)
+RegisterMiscTriggers()
+
 -- Keep fog of war ENABLED (like the original). Reveal only the mode-selection area now
 -- so the menu is navigable; the main game area is revealed at game start (RevealGameArea
 -- in BeginningStart2), and distant areas (islands, boss arenas) stay fogged until their

@@ -231,6 +231,7 @@ Circle0Scrolls = {}; Circle1Scrolls = {}; Circle2Scrolls = {}
 -- Weather
 RandomWeather       = 0
 RandomWeatherEffect = {}
+DenyWeather         = 0
 WeatherName         = {}
 for i = 0, 50 do WeatherName[i] = "" end
 

@@ -310,6 +310,33 @@ local LevelData = {
         },
         victory = { type='boss', unit=FourCC('O001') },
     },
+    [11] = {
+        intro = "|cffff8800Level 11|r — Heavier demons (h014/h00W) and infernals.",
+        track = 1, next = 12,
+        spawns = {
+            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=FourCC('h014'), n=2, dm=1,  at=ABC },
+            { u=FourCC('h00W'), n=2, dm=1,  at=ABC },
+            { u=FourCC('h016'), n=0, dm=1,  at=ABC },
+            { u=FourCC('h01R'), n=1, dm=1,  at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h014'), FourCC('h00W'), FourCC('h016'), FourCC('h01R') } },
+    },
+    [12] = {
+        intro = "|cffff8800Level 12|r — The demon horde swells (adds h017).",
+        track = 2, next = 13,
+        spawns = {
+            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=FourCC('h014'), n=2, dm=1,  at=ABC },
+            { u=FourCC('h00W'), n=2, dm=1,  at=ABC },
+            { u=FourCC('h016'), n=0, dm=1,  at=ABC },
+            { u=FourCC('h017'), n=0, dm=1,  at=ABC },
+            { u=FourCC('h03T'), n=1, dm=1,  at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h014'), FourCC('h00W'), FourCC('h016'), FourCC('h017'), FourCC('h03T') } },
+    },
 }
 
 -- ─── Generic spawn + victory plumbing ──────────────────────────────────────────
@@ -456,6 +483,7 @@ StartLevel = function(n)
     end
 
     removeSpeedWispsAfter(10.0)
+    RollWeather()   -- per-level random weather (lib/weather.lua)
 end
 
 -- Alias kept so hero_selection.BeginningStart2 (which calls Level1Start) still works.

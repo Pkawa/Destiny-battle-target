@@ -76,3 +76,45 @@ function RegisterItemDropTriggers()
         RemoveLocation(loc)
     end)
 end
+
+-- ── Purchase loot-boxes (war3map.j 35016-35123) ──
+-- Players buy a token item from a base shop (e.g. n000 sells the Lv1 box 'I00N'); picking
+-- it up consumes it and grants a random item from the rarity pools straight to inventory.
+-- Lv1 only for now (Lv2 pools + scroll boxes not ported). economy/Economy.md §5.
+function RegisterPurchaseTriggers()
+    -- 'I00N' — Lv1 item box: rarity-rolled (60/30/7/3%), item added to the buyer.
+    local box = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(box, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(box, Condition(function()
+        return GetItemTypeId(GetManipulatedItem()) == FourCC('I00N')
+    end))
+    TriggerAddAction(box, function()
+        RemoveItem(GetManipulatedItem())
+        local buyer = GetManipulatingUnit()
+        RandomItemChance = GetRandomInt(1, 100)
+        if ArtificierFeatOn then RandomItemChance = RandomItemChance + 1 end
+        if RandomItemChance <= 60 then
+            UnitAddItemByIdSwapped(drawFrom(Lv1Uncommon), buyer)
+        elseif RandomItemChance <= 90 then
+            UnitAddItemByIdSwapped(drawFrom(Lv1Rare), buyer)
+        elseif RandomItemChance <= 97 then
+            UnitAddItemByIdSwapped(drawFrom(Lv1Epic), buyer)
+        else
+            UnitAddItemByIdSwapped(drawFrom(Lv1Artifact), buyer)
+            DisplayTextToForce(GetPlayersAll(),
+                GetPlayerName(GetOwningPlayer(buyer)) .. " |cffff0000discovered |r" .. GetItemName(GetLastCreatedItem()))
+            PlaySoundBJ(snd.AllianceSound)
+        end
+    end)
+
+    -- 'I0AR' — Lv1 epic box: always grants a random Lv1 epic.
+    local epicBox = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(epicBox, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(epicBox, Condition(function()
+        return GetItemTypeId(GetManipulatedItem()) == FourCC('I0AR')
+    end))
+    TriggerAddAction(epicBox, function()
+        RemoveItem(GetManipulatedItem())
+        UnitAddItemByIdSwapped(drawFrom(Lv1Epic), GetManipulatingUnit())
+    end)
+end
