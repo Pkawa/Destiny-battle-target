@@ -75,60 +75,36 @@ function NearDefeatMusicLoop()
     return NearDefeatMusicLoop()
 end
 
--- ─── Per-level background music ───────────────────────────────────────────────
--- Drives gameplay music from CurrentTrackMusic (set 1/2/3 by each level). The
--- original wrote this global but never read it and shipped only one full-length
--- gameplay track, so all three map to it here. To add variety later, just point
--- the track numbers at different sounds in trackSound() below.
+-- ─── Wave (gameplay) music ────────────────────────────────────────────────────
+-- The original ran the WC3 stock playlist via SetMapMusic("Music",...) during normal
+-- gameplay (CurrentTrackMusic was written but never read, and the map shipped no
+-- distinct gameplay tracks). We reproduce that "vanilla" feel: once gameplay begins,
+-- the stock playlist plays continuously, pausing only for boss / near-defeat music and
+-- resuming after. (The custom Seymour Battle track read too much like boss music.)
 
-local levelMusicRunning = false
-local curTrack = 0    -- track number currently playing (0 = none)
-local secsLeft = 0    -- seconds until the current track ends and must re-loop
+local waveMusicRunning = false
+local waveStockOn = false
 
--- track number -> (sound, durationSeconds). Add cases as more tracks are imported.
-local function trackSound(n)
-    if n == 1 or n == 2 or n == 3 then
-        return snd.SeymourBattle, 113.0
-    end
-    return nil, 0
-end
-
--- Polls every 2s. Plays the desired track, loops it when it ends, and goes silent
--- whenever music is off or a boss / near-defeat track owns the channel.
-function LevelMusicTick()
-    if not levelMusicRunning then return end
-    local blocked = (not MusicOn) or BossMusic or ToughBossMusic or NearDefeatMusic
-    local desired = blocked and 0 or CurrentTrackMusic
-    if desired ~= curTrack or (desired ~= 0 and secsLeft <= 0) then
-        local oldS = trackSound(curTrack)
-        if oldS then StopSoundBJ(oldS, true) end
-        local newS, dur = trackSound(desired)
-        curTrack = desired
-        if newS then
-            StopMusicBJ(false)
-            PlaySoundBJ(newS)
-            secsLeft = dur
-        else
-            curTrack = 0
-        end
+-- Polls every 2s. Yields the channel to boss / near-defeat tracks, otherwise keeps the
+-- vanilla WC3 gameplay playlist running.
+function WaveMusicTick()
+    if not waveMusicRunning then return end
+    local bossActive = BossMusic or ToughBossMusic or NearDefeatMusic
+    if bossActive then
+        if waveStockOn then StopMusicBJ(false); waveStockOn = false end
+    elseif not waveStockOn then
+        SetMapMusic("Music", true, 0)   -- (re)establish + play the vanilla playlist
+        waveStockOn = true
     end
     TriggerSleepAction(2.0)
-    secsLeft = secsLeft - 2.0
-    return LevelMusicTick()
+    return WaveMusicTick()
 end
 
-function StartLevelMusic()
-    if levelMusicRunning then return end
-    levelMusicRunning = true
-    StartMusicLoop(LevelMusicTick)
-end
-
--- Immediately silence the level track (used on victory before the win sting).
-function StopLevelMusic()
-    local s = trackSound(curTrack)
-    if s then StopSoundBJ(s, true) end
-    curTrack  = 0
-    secsLeft  = 0
+-- Begin vanilla gameplay music. Call once when the first wave is about to start.
+function BeginWaveMusic()
+    if waveMusicRunning then return end
+    waveMusicRunning = true
+    StartMusicLoop(WaveMusicTick)
 end
 
 -- Convenience starters (set the flag + kick the loop).

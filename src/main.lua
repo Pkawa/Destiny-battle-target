@@ -21,9 +21,7 @@ RegisterHeroPoolTimers()
 -- can't bleed under our custom tracks, then start the looping intro music.
 SilenceAmbientMusic()
 StartIntroMusic()
--- Start the per-level background-music driver. It idles (MusicOn = false) during the
--- menu and while boss music plays, and plays the level track once a wave begins.
-StartLevelMusic()
+-- Vanilla gameplay music begins later, right before wave 1 (BeginningStart2 → BeginWaveMusic).
 
 -- Register hero selection triggers (mode, difficulty, pick, feats)
 RegisterHeroSelectionTriggers()
@@ -50,9 +48,19 @@ AddModeSelectionLabels()
 -- Register per-level bonus tracking triggers (halfway markers + Stalwart Defender)
 RegisterLevelTriggers()
 
--- Disable fog of war so players can see the menus and map
-FogMaskEnable(false)
-FogEnable(false)
+-- Keep fog of war ENABLED (like the original). Reveal only the mode-selection area now
+-- so the menu is navigable; the main game area is revealed at game start (RevealGameArea
+-- in BeginningStart2), and distant areas (islands, boss arenas) stay fogged until their
+-- encounters. (war3map.j STARTING_TRIGGER reveals Select_Mode + StoryBattle_Type_Select.)
+for i = 0, 7 do
+    local p = Player(i)
+    if GetPlayerController(p) == MAP_CONTROL_USER
+        and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING then
+        CreateFogModifierRectBJ(true, p, FOG_OF_WAR_VISIBLE, rct.ModeTypeSelection)
+        CreateFogModifierRectBJ(true, p, FOG_OF_WAR_VISIBLE, rct.StoryBattleTypeSelect)
+        CreateFogModifierRectBJ(true, p, FOG_OF_WAR_VISIBLE, rct.SelectMode)
+    end
+end
 
 -- Spawn one wisp per human player at the mode type selection starting position,
 -- pan their camera there, and select it so they immediately have control.

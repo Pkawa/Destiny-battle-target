@@ -366,8 +366,7 @@ StartLevel = nil
 local function onLevelVictory(data, levelIndex)
     MusicOn     = false
     BossMusic   = false
-    StopAllMusic()        -- immediately silence boss track on victory
-    StopLevelMusic()      -- silence the level background track too
+    StopAllMusic()        -- silence boss track on victory; vanilla wave music resumes via WaveMusicTick
     LevelBeaten = true
     PlaySoundBJ(snd.RoundClear)
     ThingsToDoImmediatelyFollowingVictory()

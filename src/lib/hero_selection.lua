@@ -49,14 +49,15 @@ local function SpawnBlueCompanion()
     CreateUnit(Player(1), FourCC('H04Y'), GetRectCenterX(rct.VernPatrolA), GetRectCenterY(rct.VernPatrolA), bj_UNIT_FACING)
     P2Hero = GetLastCreatedUnit()
     AdjustPlayerStateBJ(325, Player(1), PLAYER_STATE_RESOURCE_GOLD)
+    RegisterCompanionAI()  -- patrol circuit + heal/defend behaviors (lib/companion.lua)
 end
 
 -- Reveal full map fog for all players
 local function RevealGameArea()
     for i = 0, 7 do
         if IsHumanPlayer(Player(i)) then
-            CreateFogModifierRect(Player(i), FOG_OF_WAR_VISIBLE, rct.EntireGameArea, true, false)
-            CreateFogModifierRect(Player(i), FOG_OF_WAR_VISIBLE, rct.EntireCastleArea, true, false)
+            CreateFogModifierRectBJ(true, Player(i), FOG_OF_WAR_VISIBLE, rct.EntireGameArea)
+            CreateFogModifierRectBJ(true, Player(i), FOG_OF_WAR_VISIBLE, rct.EntireCastleArea)
         end
     end
 end
@@ -97,7 +98,7 @@ local function PickDifficulty()
     PanAllCamerasTo(rct.SelectDifficulty)
     for i = 0, 7 do
         if IsHumanPlayer(Player(i)) then
-            CreateFogModifierRect(Player(i), FOG_OF_WAR_VISIBLE, rct.SelectDifficulty, true, false)
+            CreateFogModifierRectBJ(true, Player(i), FOG_OF_WAR_VISIBLE, rct.SelectDifficulty)
         end
     end
     ShowDifficultyLabels()
@@ -148,7 +149,6 @@ local function OnSoloMode(trigger)
     RemoveUnit(entering)
     SpawnBlueCompanion()
     TotalPlaying = CountHumanPlayers()
-    EndIntroMusic()
     RevealGameArea()
     DifficultyModifier = DifficultyModifier - 1
     TriggerSleepAction(2.0)
@@ -206,7 +206,6 @@ local function OnRandomMode(trigger)
     if GetPlayerSlotState(Player(10)) == PLAYER_SLOT_STATE_PLAYING then
         TotalPlaying = TotalPlaying - 1
     end
-    EndIntroMusic()
     PauseAllUnitsBJ(true)
     SetSkyModel("Environment\\Sky\\LordaeronSummerSky\\LordaeronSummerSky.mdl")
     SetPlayerFlagBJ(PLAYER_STATE_GIVES_BOUNTY, true, Player(9))
@@ -235,7 +234,6 @@ local function OnPickMode(trigger)
     if GetPlayerSlotState(Player(10)) == PLAYER_SLOT_STATE_PLAYING then
         TotalPlaying = TotalPlaying - 1
     end
-    EndIntroMusic()
     SetSkyModel("Environment\\Sky\\LordaeronSummerSky\\LordaeronSummerSky.mdl")
     SetPlayerFlagBJ(PLAYER_STATE_GIVES_BOUNTY, true, Player(9))
 
@@ -243,7 +241,7 @@ local function OnPickMode(trigger)
     for i = 0, 7 do
         if IsHumanPlayer(Player(i)) then
             PanCameraToTimedLocForPlayer(Player(i), GetRectCenter(rct.PickMode), 0)
-            CreateFogModifierRect(Player(i), FOG_OF_WAR_VISIBLE, rct.PickMode, true, false)
+            CreateFogModifierRectBJ(true, Player(i), FOG_OF_WAR_VISIBLE, rct.PickMode)
         end
     end
     -- Start hero preview loop
@@ -372,7 +370,7 @@ function BeginningStart()
     -- Reveal feat area fog
     for i = 0, 7 do
         if IsHumanPlayer(Player(i)) then
-            CreateFogModifierRect(Player(i), FOG_OF_WAR_VISIBLE, rct.EntireFeatArea, true, false)
+            CreateFogModifierRectBJ(true, Player(i), FOG_OF_WAR_VISIBLE, rct.EntireFeatArea)
         end
     end
 end
@@ -484,7 +482,8 @@ function BeginningStart2()
     if GameStarted then return end
     GameStarted = true  -- set immediately to block any concurrent call during the sleeps below
 
-    IntroMusicOn    = false
+    -- Intro music keeps playing through this sequence; it is stopped ~4s before wave 1
+    -- (EndIntroMusic below), then vanilla gameplay music takes over.
     AntiDuplicateTxt = true
     PauseAllUnitsBJ(false)
 
@@ -510,7 +509,6 @@ function BeginningStart2()
 
     TriggerSleepAction(6.0)
 
-    IntroMusicOn = false
     PlaySoundBJ(snd.GameFound)
     DisplayTextToForce(GetPlayersAll(), "The battle begins!")
 
@@ -519,7 +517,12 @@ function BeginningStart2()
     PingMinimapLocForForceEx(GetPlayersAll(), GetRectCenter(rct.SpawnB), 10.0, bj_MINIMAPPINGSTYLE_SIMPLE, 100, 0.0, 0.0)
     PingMinimapLocForForceEx(GetPlayersAll(), GetRectCenter(rct.SpawnC), 10.0, bj_MINIMAPPINGSTYLE_SIMPLE, 100, 0.0, 0.0)
 
-    TriggerSleepAction(11.0)
+    TriggerSleepAction(9.0)
+
+    -- Stop the intro and bring in vanilla gameplay music ~4s before wave 1 spawns.
+    EndIntroMusic()
+    BeginWaveMusic()
+    TriggerSleepAction(2.0)
 
     -- Start Level 1. (No GameStarted guard here — re-entry is already prevented by
     -- the GameStarted=true set at the top of this function. The reference set
