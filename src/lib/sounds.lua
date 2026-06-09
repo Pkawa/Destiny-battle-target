@@ -129,4 +129,33 @@ function InitSounds()
     SetSoundChannel(snd.QuestLog, 0)
     SetSoundVolume(snd.QuestLog, 80)
     SetSoundPitch(snd.QuestLog, 1.0)
+
+    -- Hero death cry sounds (war3map.j 3354-3363, 3597-3605, 3226-3230)
+    -- gg_snd_13___sound_1 — male death cry (imported MP3)
+    snd.s13 = CreateSound("war3mapImported\\13_-_sound_1.mp3", false, false, true, 10, 10, "DefaultEAXON")
+    SetSoundDuration(snd.s13, 6480)
+    SetSoundChannel(snd.s13, 0)
+    SetSoundVolume(snd.s13, 127)
+    SetSoundPitch(snd.s13, 1.0)
+
+    -- gg_snd_14___sound_2 — female death cry (imported MP3)
+    snd.s14 = CreateSound("war3mapImported\\14_-_sound_2.mp3", false, false, true, 10, 10, "DefaultEAXON")
+    SetSoundDuration(snd.s14, 6480)
+    SetSoundChannel(snd.s14, 0)
+    SetSoundVolume(snd.s14, 127)
+    SetSoundPitch(snd.s14, 1.0)
+
+    -- gg_snd_DragonWhat1 — Crested Drake death cry (3D engine sound)
+    snd.DragonWhat1 = CreateSound("Units\\Creeps\\AzureDragon\\DragonWhat1.wav", false, true, true, 10, 10, "DefaultEAXON")
+    SetSoundDuration(snd.DragonWhat1, 1014)
+    SetSoundChannel(snd.DragonWhat1, 0)
+    SetSoundVolume(snd.DragonWhat1, 100)
+    SetSoundPitch(snd.DragonWhat1, 0.7)
+
+    -- gg_snd_PeasantYesAttack4 — extra line for Human Engineer cry 1
+    snd.PeasantYesAttack4 = CreateSound("Units\\Human\\Peasant\\PeasantYesAttack4.wav", false, false, true, 10, 10, "DefaultEAXON")
+    SetSoundDuration(snd.PeasantYesAttack4, 2328)
+    SetSoundChannel(snd.PeasantYesAttack4, 0)
+    SetSoundVolume(snd.PeasantYesAttack4, 100)
+    SetSoundPitch(snd.PeasantYesAttack4, 1.0)
 end
