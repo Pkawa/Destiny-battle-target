@@ -31,18 +31,174 @@ w(29, "Angelic Rainbow",      false, nil)
 w(30, "Fortune's Favor",      false, nil)
 w(31, "Fortune's Gloom",      true,  nil)
 
+-- ── Mechanical sub-effects (war3map.j 30196-31660) ─────────────────────────────
+
+-- W15 Acid Rain: -1% HP every 5s for 90s to all non-P8/P9 non-structure units.
+W[15].mechEffect = function()
+    local tick, gen = 0, RandomWeather
+    local t = CreateTimer()
+    TimerStart(t, 5.0, true, function()
+        tick = tick + 1
+        if RandomWeather ~= gen or tick > 18 then DestroyTimer(t); return end
+        allPlayerUnits(function()
+            local u = GetEnumUnit()
+            local hp = GetUnitStateSwap(UNIT_STATE_LIFE, u)
+            SetUnitLifeBJ(u, hp - hp / 100.0)
+        end)
+    end)
+end
+
+-- W16 Wind Gusts: spawn tornado unit (e00B) at WeatherTarget for 90s.
+W[16].mechEffect = function() spawnWeatherUnit('e00B', 90.0) end
+
+-- W17 Holy Winds: spawn holy-wind unit (e00C) at WeatherTarget for 90s.
+W[17].mechEffect = function() spawnWeatherUnit('e00C', 90.0) end
+
+-- W18 Deluge: unit e00A casts cloudoffog over the WeatherTarget zone.
+W[18].mechEffect = function()
+    if unit_e00A then
+        IssuePointOrderLoc(unit_e00A, "cloudoffog", GetRectCenter(rct.WeatherTarget))
+    end
+end
+
+-- W19 Manastorm: spawn mana-storm unit (e009) at WeatherTarget for 90s.
+W[19].mechEffect = function() spawnWeatherUnit('e009', 90.0) end
+
+-- W20 Haunt Fog: unit e008 casts acid bomb over the WeatherTarget zone.
+W[20].mechEffect = function()
+    if unit_e008 then
+        IssuePointOrderLoc(unit_e008, "acidbomb", GetRectCenter(rct.WeatherTarget))
+    end
+end
+
+-- W22 Heat Wave: disables Energy Regeneration for 90s.
+-- (EnergyRegeneration system not yet ported — effect noted, no-op for now.)
+W[22].mechEffect = function()
+    DisplayTimedTextToForce(GetPlayersAll(), 8.0,
+        "|cffff4400Heat Wave: Energy regeneration halted for 90 seconds!|r")
+end
+
+-- W23 Blizzard: spawn blizzard unit (e00F) at WeatherTarget for 90s.
+W[23].mechEffect = function() spawnWeatherUnit('e00F', 90.0) end
+
+-- W24 Mageslayer Mists: drain 20 mana from all non-P8/P9 non-structure units every 5s for 90s.
+W[24].mechEffect = function()
+    local tick, gen = 0, RandomWeather
+    local t = CreateTimer()
+    TimerStart(t, 5.0, true, function()
+        tick = tick + 1
+        if RandomWeather ~= gen or tick > 18 then DestroyTimer(t); return end
+        allPlayerUnits(function()
+            local u = GetEnumUnit()
+            local mana = GetUnitStateSwap(UNIT_STATE_MANA, u)
+            SetUnitManaBJ(u, math.max(0.0, mana - 20.0))
+        end)
+    end)
+end
+
+-- W25 Mute Breezes: unit e008 casts silence over the WeatherTarget zone for 75s.
+W[25].mechEffect = function()
+    if unit_e008 then
+        IssuePointOrderLoc(unit_e008, "silence", GetRectCenter(rct.WeatherTarget))
+    end
+end
+
+-- W26 Midnight Storm: black cinematic filter for 90s (blinds players).
+W[26].mechEffect = function()
+    CinematicFilterGenericBJ(3.0, BLEND_MODE_BLEND,
+        "ReplaceableTextures\\CameraMasks\\Black_mask.blp",
+        100, 100, 100, 100, 0, 0, 0, 35.0)
+    DisplayCineFilterBJ(true)
+    local t = CreateTimer()
+    TimerStart(t, 90.0, false, function()
+        DisplayCineFilterBJ(false)
+        DestroyTimer(t)
+    end)
+end
+
+-- W27 Dryad's Tears: boosts energy regen (+2) for 90s (EnergyRegenTotal system).
+W[27].mechEffect = function()
+    EnergyRegenTotal = EnergyRegenTotal + 2
+    local gen = RandomWeather
+    local t = CreateTimer()
+    TimerStart(t, 90.0, false, function()
+        if RandomWeather == gen then EnergyRegenTotal = EnergyRegenTotal - 2 end
+        DestroyTimer(t)
+    end)
+end
+
+-- W28 Invigorating Breezes: spawn morale-aura unit (e00Q) at WeatherTarget for 90s.
+W[28].mechEffect = function() spawnWeatherUnit('e00Q', 90.0) end
+
+-- W29 Angelic Rainbow: instantly restore all non-P8/P9 units to full HP and mana.
+W[29].mechEffect = function()
+    allPlayerUnits(function()
+        local u = GetEnumUnit()
+        SetUnitLifePercentBJ(u, 100)
+        SetUnitManaPercentBJ(u, 100)
+    end)
+end
+
+-- W30 Fortune's Favor: ItemDropTotal -= 5 for 60s (more loot drops).
+W[30].mechEffect = function()
+    ItemDropTotal = ItemDropTotal - 5
+    local gen = RandomWeather
+    local t = CreateTimer()
+    TimerStart(t, 60.0, false, function()
+        if RandomWeather == gen then ItemDropTotal = ItemDropTotal + 5 end
+        DestroyTimer(t)
+    end)
+end
+
+-- W31 Fortune's Gloom: ItemDropTotal += 5 for 60s (fewer loot drops).
+W[31].mechEffect = function()
+    ItemDropTotal = ItemDropTotal + 5
+    local gen = RandomWeather
+    local t = CreateTimer()
+    TimerStart(t, 60.0, false, function()
+        if RandomWeather == gen then ItemDropTotal = ItemDropTotal - 5 end
+        DestroyTimer(t)
+    end)
+end
+
 local activeWeather = nil
 
 local function applyWeather(entry)
     DisplayTimedTextToForce(GetPlayersAll(), 12.0, "|cffaaccffWeather: " .. entry.name .. "|r")
-    if not entry.effect then return end           -- text-only weather (mechanical effect TBD)
-    if activeWeather then RemoveWeatherEffect(activeWeather) end
-    activeWeather = AddWeatherEffectSaveLast(rct.EntireGameArea, entry.effect)  -- created + enabled
-    local e = activeWeather
+    if entry.effect then
+        if activeWeather then RemoveWeatherEffect(activeWeather) end
+        activeWeather = AddWeatherEffectSaveLast(rct.EntireGameArea, entry.effect)
+        local e = activeWeather
+        local t = CreateTimer()
+        TimerStart(t, 90.0, false, function()
+            if activeWeather == e then activeWeather = nil end
+            RemoveWeatherEffect(e)
+            DestroyTimer(t)
+        end)
+    end
+    if entry.mechEffect then entry.mechEffect() end
+end
+
+-- Helper: filter non-P8/P9 non-structure units across the map.
+local function allPlayerUnits(fn)
+    local grp = GetUnitsInRectMatching(GetPlayableMapRect(), Condition(function()
+        return GetOwningPlayer(GetFilterUnit()) ~= Player(8)
+            and GetOwningPlayer(GetFilterUnit()) ~= Player(9)
+            and not IsUnitType(GetFilterUnit(), UNIT_TYPE_STRUCTURE)
+    end))
+    ForGroup(grp, fn)
+    DestroyGroup(grp)
+end
+
+-- Helper: spawn a temporary weather-entity unit at WeatherTarget and remove it after `dur` seconds.
+local function spawnWeatherUnit(unitId, dur)
+    local u = CreateNUnitsAtLoc(1, FourCC(unitId), Player(11),
+        GetRectCenter(rct.WeatherTarget), bj_UNIT_FACING)
     local t = CreateTimer()
-    TimerStart(t, 90.0, false, function()
-        if activeWeather == e then activeWeather = nil end
-        RemoveWeatherEffect(e)
+    TimerStart(t, dur, false, function()
+        local grp = GetUnitsOfPlayerAndTypeId(Player(11), FourCC(unitId))
+        ForGroup(grp, function() RemoveUnit(GetEnumUnit()) end)
+        DestroyGroup(grp)
         DestroyTimer(t)
     end)
 end

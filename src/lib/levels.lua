@@ -69,6 +69,7 @@ function BonusReset()
     SpeedyVictory             = true
     StalwartDefender          = true
     PlayerTotalDeathsForRound = 0
+    DieHardActivated          = false   -- Diehard feat rearms each level (war3map.j 16352)
     if underAttackTrg then EnableTrigger(underAttackTrg) end  -- re-arm warning (war3map.j 6420)
 end
 
@@ -101,6 +102,18 @@ function BonusesAndUpkeep(levelIndex)
     if levelIndex and LevelBonuses[levelIndex] then
         awardAll(100, "|cff00ff00Level Bonus — |cffffcc00+100 Gold|r (level challenge met!)")
         LevelBonuses[levelIndex] = false
+    end
+    -- Applied Knowledge feat: bonus XP per level end (war3map.j 15850-15857)
+    if AppliedKnowledgeHero then
+        local xp = CurrentLevel * 10
+        AddHeroXP(AppliedKnowledgeHero, xp, true)
+        DisplayTextToForce(GetPlayersAll(),
+            "|cff00ccff+" .. tostring(xp) .. " EXP! (Applied Knowledge)|r")
+    end
+    -- Master of the Well feat: restore 50% mana to the Fountain at level end (war3map.j 16521-16528)
+    if MasterOfWellActive and unit_h010 then
+        SetUnitManaBJ(unit_h010, GetUnitStateSwap(UNIT_STATE_MANA, unit_h010)
+            + GetUnitStateSwap(UNIT_STATE_MAX_MANA, unit_h010) * 0.50)
     end
 end
 
@@ -337,12 +350,660 @@ local LevelData = {
         victory = { type='clearAll', units={
             FourCC('h014'), FourCC('h00W'), FourCC('h016'), FourCC('h017'), FourCC('h03T') } },
     },
+    -- ── Levels 13–29 ──────────────────────────────────────────────────────────
+    [13] = {
+        intro = "|cff66cc66Level 13|r — The ancient forest erupts! Find and slay the Ancient Treant.",
+        track = 3, next = 14,
+        spawns = {},         -- all initial spawns in setup hook
+        victory = { type='itemPickup', item=FourCC('I00U') },
+        setup = setupLevel13,
+    },
+    [14] = {
+        -- Caravan escort — full pathing/trap mechanic not yet ported. Simplified.
+        intro = "|cffff8800Level 14|r — Escort the caravan! Defend against ambushes.",
+        track = 1, next = 15,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h01E'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01F'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01G'), n=1, dm=1, at=ABC },
+        },
+        victory = { type='clearAll', units={ FourCC('h01E'), FourCC('h01F'), FourCC('h01G') } },
+        setup = setupLevel14,
+    },
+    [15] = {
+        intro = "|cffff8800Level 15|r — Undead infantry with hellspawn support.",
+        track = 2, next = 16,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h01E'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01F'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01R'), n=0, dm=1, at='HellSpawn' },
+            { u=FourCC('h06Q'), n=1,       at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h01E'), FourCC('h01F'), FourCC('h01R'), FourCC('h06Q') } },
+    },
+    [16] = {
+        intro = "|cffff8800Level 16|r — Warlocks (h01G) slow your heroes.",
+        track = 3, next = 17,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h01E'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01F'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01G'), n=2, dm=1, at=ABC },
+            { u=FourCC('h03T'), n=1, dm=1, at='HellSpawn' },
+            { u=FourCC('h01R'), n=1, dm=1, at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h01E'), FourCC('h01F'), FourCC('h01G'), FourCC('h01R'), FourCC('h03T') } },
+        setup = setupLevel16AI,
+    },
+    [17] = {
+        intro = "|cffff8800Level 17|r — Necromancers (h01H) join the undead host.",
+        track = 1, next = 18,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h01E'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01F'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01G'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01H'), n=1, dm=1, at=ABC },
+            { u=FourCC('h01R'), n=1, dm=1, at='HellSpawn' },
+            { u=FourCC('h03T'), n=1, dm=1, at='HellSpawn' },
+            { u=FourCC('h06Q'), n=0, dm=1, at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h01E'), FourCC('h01F'), FourCC('h01G'), FourCC('h01H'),
+            FourCC('h01R'), FourCC('h03T'), FourCC('h06Q') } },
+        setup = setupLevel16AI,   -- h01G AI still present
+    },
+    [18] = {
+        -- Death Blast level: enemies placed at MarkDamnation regions, not standard lanes.
+        -- h01I periodically casts deathcoil. Victory when all h01I are slain.
+        intro = "|cffff3300Level 18 — DEATH BLAST!|r Destroy the Plague Casters before they destroy you.",
+        track = 2, next = 19,
+        spawns = {},   -- all spawns in setup hook
+        victory = { type='lastOfType', unit=FourCC('h01I') },
+        setup = setupLevel18,
+    },
+    [19] = {
+        -- Enemy HP boosted to 125% (SetPlayerHandicap). Adds h01Q + h06P.
+        intro = "|cffff4400Level 19|r — Boosted enemy HP! The undead surge forward.",
+        track = 3, next = 20,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
+            { u=FourCC('h01E'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01F'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01G'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01H'), n=1, dm=1, at=ABC },
+            { u=FourCC('h01Q'), n=1, dm=1, at=ABC },
+            { u=FourCC('h06P'), n=1,       at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h06O'), FourCC('h01E'), FourCC('h01F'), FourCC('h01G'),
+            FourCC('h01H'), FourCC('h01Q'), FourCC('h06P') } },
+        setup = setupLevel19,
+    },
+    [20] = {
+        intro = "|cffff0000Level 20 — BOSS: Undead Behemoth!|r",
+        next = 21, boss = true,
+        spawns = {
+            { u=FourCC('e01M'), n=1,  at=ABC },
+            { u=FourCC('h01E'), n=5,  at='B' },
+            { u=FourCC('h01G'), n=3,  at='B' },
+            { u=FourCC('h01H'), n=3,  at='B' },
+            { u=FourCC('h01Q'), n=3,  at='B' },
+            { u=FourCC('O004'), n=1,  at='B' },   -- Undead Behemoth
+            { u=FourCC('h04R'), n=1,  at='B' },
+        },
+        victory = { type='boss', unit=FourCC('O004') },
+        setup = setupLevel20,
+    },
+    [21] = {
+        -- Random placement level with Mimics. Simplified: spawn from Level21 regions.
+        intro = "|cffff8800Level 21|r — The enemy scatters across the land. Hunt them all!",
+        track = 1, next = 22,
+        spawns = {},   -- all spawns in setup hook (Level21A-H regions)
+        victory = { type='clearAll', units={ FourCC('h01S'), FourCC('h01R') } },
+        setup = setupLevel21,
+        noAutoPatrol = true,  -- patrol handled inside setup
+    },
+    [22] = {
+        intro = "|cffff8800Level 22|r — Spectral undead (h01S) and river trolls (n00F) advance.",
+        track = 2, next = 23,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h01S'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01R'), n=3, dm=1, at=ABC },
+            { u=FourCC('n00F'), n=2, dm=1, at=ABC },
+            { u=FourCC('h01R'), n=1, dm=1, at='HellSpawn' },
+            { u=FourCC('h03T'), n=1, dm=1, at='HellSpawn' },
+            { u=FourCC('h06Q'), n=0, dm=1, at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h01R'), FourCC('h01S'), FourCC('n00F'), FourCC('h06Q'), FourCC('h03T') } },
+    },
+    [23] = {
+        intro = "|cffff8800Level 23|r — Gargoyles (h02O) and a massed undead assault.",
+        track = 3, next = 24,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h01S'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01R'), n=3, dm=1, at=ABC },
+            { u=FourCC('n00F'), n=2, dm=1, at=ABC },
+            { u=FourCC('h02O'), n=0, dm=1, at='A' },
+            { u=FourCC('h02O'), n=1, dm=1, at='B' },
+            { u=FourCC('h02O'), n=0, dm=1, at='C' },
+            { u=FourCC('h01R'), n=4, dm=1, at='HellSpawn' },
+            { u=FourCC('h06P'), n=0, dm=1, at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h01R'), FourCC('h01S'), FourCC('n00F'), FourCC('h02O'), FourCC('h06P') } },
+    },
+    [24] = {
+        intro = "|cffff4400Level 24|r — The final wave before the Megaboss!",
+        track = 3, next = nil,  -- chains to Megaboss 1 (not yet ported)
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
+            { u=FourCC('h01S'), n=3, dm=1, at=ABC },
+            { u=FourCC('h01R'), n=2, dm=1, at=ABC },
+            { u=FourCC('h02O'), n=1, dm=1, at=ABC },
+            { u=FourCC('h03T'), n=1, dm=1, at=ABC },
+            { u=FourCC('h01R'), n=2, dm=1, at='HellSpawn' },
+            { u=FourCC('h03T'), n=2, dm=1, at='HellSpawn' },
+            { u=FourCC('h06P'), n=0, dm=1, at='HellSpawn' },
+            { u=FourCC('h06Q'), n=1, dm=1, at='HellSpawn' },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h06O'), FourCC('h01R'), FourCC('h01S'), FourCC('n00F'),
+            FourCC('h02O'), FourCC('h03T'), FourCC('h06P'), FourCC('h06Q') } },
+    },
+    -- No Level 25 in original (numbering skips 24→Megaboss1→26)
+    [26] = {
+        intro = "|cffff4400Level 26|r — Boosted HP and damage! Dark Warlocks (h04M) lead the charge.",
+        track = 3, next = 27,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h04M'), n=3, dm=1, at=ABC },
+            { u=FourCC('h04N'), n=1, dm=1, at=ABC },
+        },
+        victory = { type='clearAll', units={ FourCC('h04M'), FourCC('h04N') } },
+        setup = setupLevel26,
+    },
+    [27] = {
+        intro = "|cffff8800Level 27|r — Summoners (h04O) reinforce the dark warlocks.",
+        track = 3, next = 28,
+        spawns = {
+            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=FourCC('h04M'), n=3, dm=1,  at=ABC },
+            { u=FourCC('h04N'), n=1, dm=1,  at=ABC },
+            { u=FourCC('h04O'), n=0, dm=4,  at=ABC },  -- 4*DM summons (multiply variant)
+        },
+        victory = { type='clearAll', units={ FourCC('h04M'), FourCC('h04N'), FourCC('h04O') } },
+    },
+    [28] = {
+        intro = "|cffff8800Level 28|r — Spider webs across the land! Guardians (h04U) defend key zones.",
+        track = 3, next = 29,
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h04M'), n=3, dm=1, at=ABC },
+            { u=FourCC('h04N'), n=1, dm=1, at=ABC },
+            { u=FourCC('h04O'), n=0, dm=4, at=ABC },
+            { u=FourCC('h04V'), n=1, dm=1, at=ABC },
+            -- h04U web guardians spawned in setup (random within spider web zones)
+        },
+        victory = { type='clearAll', units={
+            FourCC('h04M'), FourCC('h04N'), FourCC('h04O'), FourCC('h04V') } },
+        setup = function()
+            -- spawn h04U × 2 per web zone then call AI setup
+            for _, z in ipairs({'SpiderWebsA','SpiderWebsB','SpiderWebsC','SpiderWebsD'}) do
+                CreateNUnitsAtLoc(1, FourCC('h04U'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
+                CreateNUnitsAtLoc(1, FourCC('h04U'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
+            end
+            setupLevel28AI()
+        end,
+    },
+    [29] = {
+        intro = "|cffff8800Level 29|r — Shamans (h04W) summon spirits and a caravan raider strikes.",
+        track = 3, next = 30,  -- L30 is a boss, not yet ported
+        spawns = {
+            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
+            { u=FourCC('h04M'), n=3, dm=1, at=ABC },
+            { u=FourCC('h04N'), n=1, dm=1, at=ABC },
+            { u=FourCC('h04O'), n=0, dm=4, at=ABC },
+            { u=FourCC('h04V'), n=1, dm=1, at=ABC },
+            { u=FourCC('h04W'), n=1, dm=1, at=ABC },
+        },
+        victory = { type='clearAll', units={
+            FourCC('h06O'), FourCC('h04M'), FourCC('h04N'), FourCC('h04O'), FourCC('h04V') } },
+        setup = setupLevel29AI,
+    },
 }
 
 -- ─── Generic spawn + victory plumbing ──────────────────────────────────────────
 
 local activeVictoryTrigger = nil
-local levelGen = 0   -- bumped each StartLevel; lets an in-flight victory abort if the level changed (e.g. -goto)
+local levelGen = 0   -- bumped each StartLevel; lets an in-flight victory abort if the level changed
+
+-- ── Per-level setup hooks (levels 13-29) ──────────────────────────────────────
+
+-- Level 13: Ancient Forest (war3map.j 20755-21012)
+-- h018×DM at 13 ForestOverrun zones + h019 (Ancient Treant) at AngryEnt.
+-- Victory: pick up I00U dropped by h019. Periodic reinforcement waves from SpawnA.
+-- Hurry-up: warning at T+180s/240s, punishment wave at T+300s.
+local function setupLevel13()
+    local gen = levelGen
+    local TREANT = FourCC('h018')
+    local BOSS   = FourCC('h019')
+    local FOREST_ZONES = {
+        'ForestOverRunA','ForestOverrunB','ForestOverrunC','ForestOverrunD',
+        'ForestOverrunE','ForestOverrunF','ForestOverrunG','ForestOverrunH',
+        'ForestOverrunI','ForestOverrunJ','ForestOverrunK','ForestOverrunL',
+        'ForestOverrunM',
+    }
+    -- initial spawn
+    for _, zone in ipairs(FOREST_ZONES) do
+        local n = DifficultyModifier
+        if n > 0 then
+            CreateNUnitsAtLoc(n, TREANT, P9, GetRectCenter(rct[zone]), bj_UNIT_FACING)
+        end
+    end
+    CreateNUnitsAtLoc(1, BOSS, P9, GetRectCenter(rct.AngryEnt), bj_UNIT_FACING)
+
+    -- h019 drops I00U on death (Level_13_ItemSpawn, war3map.j 20914)
+    local itemDropTrg = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(itemDropTrg, P9, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(itemDropTrg, Condition(function()
+        return GetUnitTypeId(GetDyingUnit()) == BOSS
+    end))
+    TriggerAddAction(itemDropTrg, function()
+        CreateItemLoc(FourCC('I00U'), GetUnitLoc(GetDyingUnit()))
+        DisableTrigger(itemDropTrg)
+    end)
+
+    -- periodic reinforcement waves from SpawnA (war3map.j 20973-21006)
+    -- delays: +22s, +22s, +18s, +22s after level start
+    local base = GetRectCenter(rct.StartingPlayerArea)
+    local function patrolAll()
+        local all = GetUnitsOfPlayerAll(P9)
+        ForGroup(all, function() IssuePointOrderLoc(GetEnumUnit(), "patrol", base) end)
+        DestroyGroup(all)
+    end
+    local waves = {
+        { delay = 22, fn = function()
+            CreateNUnitsAtLoc(2, FourCC('h014'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            if DifficultyModifier > 0 then
+                CreateNUnitsAtLoc(DifficultyModifier, FourCC('h016'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            end
+            CreateNUnitsAtLoc(1, FourCC('h00W'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+        end },
+        { delay = 44, fn = function()
+            CreateNUnitsAtLoc(3, FourCC('h014'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            CreateNUnitsAtLoc(2, FourCC('h016'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            CreateNUnitsAtLoc(4, FourCC('h014'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            CreateNUnitsAtLoc(2, FourCC('h00W'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+        end },
+        { delay = 62, fn = function()
+            CreateNUnitsAtLoc(1, FourCC('h016'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            CreateNUnitsAtLoc(3, FourCC('h014'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            CreateNUnitsAtLoc(1, FourCC('h017'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+        end },
+        { delay = 84, fn = function()
+            CreateNUnitsAtLoc(2, FourCC('h016'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            CreateNUnitsAtLoc(3, FourCC('h017'), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+        end },
+    }
+    for _, w in ipairs(waves) do
+        local t = CreateTimer()
+        TimerStart(t, w.delay, false, function()
+            if not Level13Beaten and levelGen == gen then w.fn(); patrolAll() end
+            DestroyTimer(t)
+        end)
+    end
+
+    -- hurry-up (war3map.j 20870-20896): warns at T+180s, T+240s, spawns h039 at T+300s
+    local t180 = CreateTimer()
+    TimerStart(t180, 180.0, false, function()
+        if not Level13Beaten and levelGen == gen then
+            DisplayTextToForce(GetPlayersAll(), "|cffff8800The forest stirs — hurry up!|r")
+            PlaySoundBJ(snd.CreepAggroWhat1)
+        end
+        DestroyTimer(t180)
+    end)
+    local t240 = CreateTimer()
+    TimerStart(t240, 240.0, false, function()
+        if not Level13Beaten and levelGen == gen then
+            DisplayTextToForce(GetPlayersAll(), "|cffff4400The forest is erupting — kill the Ancient Treant!|r")
+            PlaySoundBJ(snd.CreepAggroWhat1)
+        end
+        DestroyTimer(t240)
+    end)
+    local t300 = CreateTimer()
+    TimerStart(t300, 300.0, false, function()
+        if not Level13Beaten and levelGen == gen then
+            DisplayTextToForce(GetPlayersAll(), "|cffff0000TOO SLOW! The forest strikes back!|r")
+            PlaySoundBJ(snd.CreepAggroWhat1)
+            for _, lane in ipairs({'SpawnA','SpawnB','SpawnC'}) do
+                CreateNUnitsAtLoc(4, FourCC('h039'), P9, GetRectCenter(rct[lane]), bj_UNIT_FACING)
+            end
+            patrolAll()
+        end
+        DestroyTimer(t300)
+    end)
+end
+
+-- Level 14: Caravan Escort stub (war3map.j 21017-21043 + 21147+)
+-- Full pathing + trap/miniboss mechanic not yet ported.
+-- Simplified: spawn attacker enemies + place caravan as flavor unit.
+local function setupLevel14()
+    CreateNUnitsAtLoc(1, FourCC('h01A'), Player(8), GetRectCenter(rct.StartingPlayerArea), bj_UNIT_FACING)
+    CreateNUnitsAtLoc(1, FourCC('h01B'), Player(8), GetRectCenter(rct.Hermit), bj_UNIT_FACING)
+end
+
+-- Level 16 AI: h01G casts slow on its attacker (war3map.j 21789-21798)
+local function setupLevel16AI()
+    local gen = levelGen
+    local aiTrg = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(aiTrg, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(aiTrg, Condition(function()
+        return GetUnitTypeId(GetAttacker()) == FourCC('h01G') and levelGen == gen
+    end))
+    TriggerAddAction(aiTrg, function()
+        IssueTargetOrderBJ(GetAttacker(), "slow", GetAttackedUnitBJ())
+    end)
+end
+
+-- Level 18: Death Blast (war3map.j 21933-22278)
+-- Units placed in MarkDamnation regions + h03T@HellSpawn. Periodic wave spawns
+-- from ABC. All h01I die every 10s cast deathcoil at a random enemy. Victory when
+-- last h01I dies (armLastOfTypeVictory handles this).
+local function setupLevel18()
+    local gen = levelGen
+    local DAMNATION = {rct.MarkDamnationA, rct.MarkDamnationB, rct.MarkDamnationC, rct.MarkDamnationD}
+    -- initial placement at MarkDamnation zones
+    for _, zone in ipairs(DAMNATION) do
+        CreateNUnitsAtLoc(1, FourCC('h01I'), P9, GetRectCenter(zone), bj_UNIT_FACING)
+        if DifficultyModifier > 0 then
+            CreateNUnitsAtLoc(DifficultyModifier, FourCC('h01E'), P9, GetRandomLocInRect(zone), bj_UNIT_FACING)
+        end
+        CreateNUnitsAtLoc(1, FourCC('h01E'), P9, GetRandomLocInRect(zone), bj_UNIT_FACING)
+        CreateNUnitsAtLoc(1, FourCC('h01E'), P9, GetRandomLocInRect(zone), bj_UNIT_FACING)
+        CreateNUnitsAtLoc(1, FourCC('h01E'), P9, GetRandomLocInRect(zone), bj_UNIT_FACING)
+        CreateNUnitsAtLoc(2, FourCC('h01G'), P9, GetRandomLocInRect(zone), bj_UNIT_FACING)
+        CreateNUnitsAtLoc(1, FourCC('h01H'), P9, GetRandomLocInRect(zone), bj_UNIT_FACING)
+    end
+    CreateNUnitsAtLoc(7 + DifficultyModifier, FourCC('h03T'), P9,
+        GetRectCenter(rct.HellSpawn), bj_UNIT_FACING)
+
+    -- Death Blast: h01I casts deathcoil every 10s (war3map.j 22268-22278)
+    local deathBlast = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(deathBlast, 10.0)
+    TriggerAddAction(deathBlast, function()
+        if levelGen ~= gen then DisableTrigger(deathBlast); return end
+        local grp = GetUnitsOfTypeIdAll(FourCC('h01I'))
+        ForGroup(grp, function()
+            local tgt = GroupPickRandomUnit(GetUnitsInRangeOfLocMatching(
+                1500.0, GetUnitLoc(GetEnumUnit()),
+                Condition(function()
+                    return GetOwningPlayer(GetFilterUnit()) ~= P9
+                        and GetOwningPlayer(GetFilterUnit()) ~= Player(8)
+                end)))
+            if tgt then IssueTargetOrderBJ(GetEnumUnit(), "deathcoil", tgt) end
+        end)
+        DestroyGroup(grp)
+    end)
+
+    -- Periodic reinforcement waves (war3map.j 22146-22240), intervals ~20-32s
+    -- Simplified to fixed 26s intervals (midpoint of original rand(20,32))
+    local waveCount = 0
+    local waveData = {
+        -- wave 1
+        { {2,'h01F','B'},{2,'h01E','B'},{2,'h01E','A'},{2,'h01F','C'},{2,'h01E','C'},{2,'h01F','A'},
+          {1,'h01G','A'},{1,'h01G','C'},{1,'h01G','B'} },
+        -- wave 2
+        { {1,'h01E','A'},{1,'h01E','B'},{1,'h01E','C'},{1,'h01F','C'},{1,'h01F','B'},{1,'h01F','A'},
+          {1,'h01G','A'},{1,'h01G','C'},{1,'h01G','B'},{1,'h01H','C'},{1,'h01H','B'},{1,'h01H','A'} },
+        -- wave 3
+        { {1,'h01E','A'},{1,'h01E','B'},{1,'h01E','C'},{3,'h01F','C'},{1,'h01F','B'},{3,'h01F','A'},
+          {1,'h01G','A'},{1,'h01G','C'},{1,'h01G','B'},{1,'h01H','B'} },
+        -- wave 4 (big push)
+        { {6,'h01E','A'},{6,'h01E','B'},{6,'h01E','C'} },
+        -- wave 5
+        { {2,'h01E','A'},{1,'h01E','B'},{1,'h01E','C'},{1,'h01F','C'},{2,'h01F','B'},{1,'h01F','A'},
+          {1,'h01G','A'},{2,'h01G','C'},{1,'h01G','B'} },
+        -- wave 6
+        { {3,'h01E','A'},{1,'h01E','B'},{3,'h01E','C'},{2,'h01F','C'},{2,'h01F','B'},{1,'h01F','A'},
+          {1,'h01G','A'},{1,'h01G','C'},{1,'h01G','B'} },
+    }
+    local function spawnWave18(idx)
+        for _, s in ipairs(waveData[idx]) do
+            local n, uid, lane = s[1], s[2], s[3]
+            CreateNUnitsAtLoc(n, FourCC(uid), P9,
+                GetRectCenter(rct['Spawn' .. lane]), bj_UNIT_FACING)
+        end
+        local base = GetRectCenter(rct.StartingPlayerArea)
+        for _, lane in ipairs({'SpawnA','SpawnB','SpawnC'}) do
+            local inLane = GetUnitsInRectOfPlayer(rct['Spawn' .. lane:sub(-1)], P9)
+            ForGroup(inLane, function()
+                IssuePointOrderLoc(GetEnumUnit(), "patrol", base)
+            end)
+            DestroyGroup(inLane)
+        end
+    end
+    local function scheduleWave(delay, idx)
+        local t = CreateTimer()
+        TimerStart(t, delay, false, function()
+            if not Level18Beaten and levelGen == gen then spawnWave18(idx) end
+            DestroyTimer(t)
+        end)
+    end
+    -- stagger waves; original uses rand(20,32) per gap — use midpoint 26s
+    local acc = 26.0
+    for i = 1, #waveData do
+        scheduleWave(acc, i)
+        acc = acc + 26.0
+    end
+end
+
+-- Level 19: HP boost wave (war3map.j 22289-22332)
+-- Sets Player(9) handicap to 125% HP, spawns h06O + dense undead + h06P.
+local function setupLevel19()
+    SetPlayerHandicapBJ(P9, 125.0)
+end
+
+-- Level 20: Undead Behemoth Boss O004 (war3map.j 22415-22453)
+-- AI: Call to Grave (faeriefire+HP-cut), Blood Pulse (AoE + self-heal), Devouring Plague (shadowstrike)
+local function setupLevel20()
+    local gen = levelGen
+    -- configure boss
+    local O004 = FourCC('O004')
+    local grp = GetUnitsOfTypeIdAll(O004)
+    ForGroup(grp, function()
+        local b = GetEnumUnit()
+        local lvl = math.max(1, 6 * DifficultyModifier)
+        SetHeroLevelBJ(b, lvl, false)
+        SelectHeroSkill(b, FourCC('AEsh'))  -- shadow strike / call to grave ability
+    end)
+    DestroyGroup(grp)
+
+    -- AI1 (every 35s): Call to the Grave — faeriefire + HP reduced to 25% after countdown
+    local ai1 = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(ai1, 35.0)
+    TriggerAddAction(ai1, function()
+        if levelGen ~= gen then DisableTrigger(ai1); return end
+        local boss = GroupPickRandomUnit(GetUnitsOfTypeIdAll(O004))
+        if not boss then return end
+        local tgt = GroupPickRandomUnit(GetUnitsInRangeOfLocMatching(
+            2000.0, GetUnitLoc(boss),
+            Condition(function()
+                return GetOwningPlayer(GetFilterUnit()) ~= P9
+                    and IsUnitType(GetFilterUnit(), UNIT_TYPE_HERO)
+            end)))
+        if not tgt then return end
+        IssueTargetOrderBJ(boss, "faeriefire", tgt)
+        DisplayTextToForce(GetPlayersAll(),
+            "|cffff0000" .. GetUnitName(tgt) .. " — Call to the Grave! Will take massive damage in 30s!|r")
+        -- 30s later: cut HP to 25%
+        local capturedTgt = tgt
+        local tTimer = CreateTimer()
+        TimerStart(tTimer, 30.0, false, function()
+            if levelGen == gen and GetUnitTypeId(capturedTgt) ~= 0 then
+                SetUnitLifeBJ(capturedTgt,
+                    GetUnitStateSwap(UNIT_STATE_LIFE, capturedTgt) / 4.0)
+            end
+            DestroyTimer(tTimer)
+        end)
+    end)
+
+    -- AI2 (every 24s): Blood Pulse — AoE around boss + self-heal
+    local ai2 = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(ai2, 24.0)
+    TriggerAddAction(ai2, function()
+        if levelGen ~= gen then DisableTrigger(ai2); return end
+        local boss = GroupPickRandomUnit(GetUnitsOfTypeIdAll(O004))
+        if not boss then return end
+        DisplayTextToForce(GetPlayersAll(), "|cffff8800Blood Pulse!|r")
+        local bx, by = GetUnitX(boss), GetUnitY(boss)
+        UnitDamagePoint(boss, 0, 125.0, bx, by, 200.0,
+            true, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        SetUnitLifeBJ(boss, GetUnitStateSwap(UNIT_STATE_LIFE, boss) + 400.0)
+    end)
+
+    -- AI3 (every 20s): Devouring Plague — shadowstrike on nearby enemy
+    local ai3 = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(ai3, 20.0)
+    TriggerAddAction(ai3, function()
+        if levelGen ~= gen then DisableTrigger(ai3); return end
+        local boss = GroupPickRandomUnit(GetUnitsOfTypeIdAll(O004))
+        if not boss then return end
+        local tgt = GroupPickRandomUnit(GetUnitsInRangeOfLocMatching(
+            600.0, GetUnitLoc(boss),
+            Condition(function()
+                return GetOwningPlayer(GetFilterUnit()) ~= P9
+            end)))
+        if tgt then IssueTargetOrderBJ(boss, "shadowstrike", tgt) end
+    end)
+end
+
+-- Level 21: Random mob placement + Mimics stub (war3map.j 22818-23212)
+-- Simplified: sparse spawn at Level21A-H regions, clearAll h01S+h01R.
+local function setupLevel21()
+    local gen = levelGen
+    local base = GetRectCenter(rct.StartingPlayerArea)
+    local zones = {
+        'Level21A','Level21B','Level21C','Level21D',
+        'Level21E','Level21F','Level21G','Level21H',
+    }
+    for _, z in ipairs(zones) do
+        CreateNUnitsAtLoc(4, FourCC('h01S'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
+        CreateNUnitsAtLoc(4, FourCC('h01R'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
+    end
+    -- h01S casts curse on attacker (Level_21_AI, war3map.j 22857-22862)
+    local aiTrg = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(aiTrg, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(aiTrg, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('h01S') and levelGen == gen
+    end))
+    TriggerAddAction(aiTrg, function()
+        DisableTrigger(aiTrg)
+        IssueTargetOrderBJ(GetAttackedUnitBJ(), "curse", GetAttacker())
+        local t = CreateTimer()
+        TimerStart(t, 1.0, false, function()
+            if levelGen == gen then EnableTrigger(aiTrg) end
+            DestroyTimer(t)
+        end)
+    end)
+    -- patrol to base
+    local all = GetUnitsOfPlayerAll(P9)
+    ForGroup(all, function() IssuePointOrderLoc(GetEnumUnit(), "patrol", base) end)
+    DestroyGroup(all)
+    -- hurry-up: after 300s spawn h04L from SpawnC
+    local t300 = CreateTimer()
+    TimerStart(t300, 300.0, false, function()
+        if not Level21Beaten and levelGen == gen then
+            DisplayTextToForce(GetPlayersAll(), "|cffff0000The hidden guardian appears!|r")
+            PlaySoundBJ(snd.CreepAggroWhat1)
+            CreateNUnitsAtLoc(1, FourCC('h04L'), P9, GetRectCenter(rct.SpawnC), bj_UNIT_FACING)
+        end
+        DestroyTimer(t300)
+    end)
+end
+
+-- Level 26: HP+DMG boost, cleanup e00U units (war3map.j 23497-23533)
+-- h04M casts carrionswarm at attacker when ≤50% HP (Level_26_AI, war3map.j 23593-23613)
+local function setupLevel26()
+    SetPlayerHandicapBJ(P9, 135.0)
+    SetPlayerHandicapDamageBJ(P9, 125.0)
+    local e00U = GetUnitsOfTypeIdAll(FourCC('e00U'))
+    ForGroup(e00U, function() RemoveUnit(GetEnumUnit()) end)
+    DestroyGroup(e00U)
+
+    local gen = levelGen
+    local aiTrg = CreateTrigger()
+    DisableTrigger(aiTrg)
+    TriggerRegisterPlayerUnitEventSimple(aiTrg, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(aiTrg, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('h04M')
+            and GetUnitLifePercent(GetAttackedUnitBJ()) <= 50.0
+            and levelGen == gen
+    end))
+    TriggerAddAction(aiTrg, function()
+        local u = GetAttackedUnitBJ()
+        local atkLoc = GetUnitLoc(GetAttacker())
+        for _ = 1, 5 do
+            IssuePointOrderLoc(u, "carrionswarm", atkLoc)
+            TriggerSleepAction(2.0)
+        end
+        RemoveLocation(atkLoc)
+    end)
+    EnableTrigger(aiTrg)
+end
+
+-- Level 28: h04V windwalk + retreat (Level_28_AI, war3map.j 23824-23837)
+local function setupLevel28AI()
+    local gen = levelGen
+    local aiTrg = CreateTrigger()
+    DisableTrigger(aiTrg)
+    TriggerRegisterPlayerUnitEventSimple(aiTrg, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(aiTrg, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('h04V')
+            and GetUnitLifePercent(GetAttackedUnitBJ()) <= 50.0
+            and levelGen == gen
+    end))
+    TriggerAddAction(aiTrg, function()
+        local u = GetAttackedUnitBJ()
+        IssueImmediateOrderBJ(u, "windwalk")
+        TriggerSleepAction(2.0)
+        IssuePointOrderLoc(u, "move", GetRectCenter(rct.EntranceToFortress))
+    end)
+    EnableTrigger(aiTrg)
+end
+
+-- Level 29: h04W (Shaman) casts spiritwolf when attacked at ≤80% HP and full mana
+-- (Level_29_AI, war3map.j 23996-24025)
+local function setupLevel29AI()
+    local gen = levelGen
+    local aiTrg = CreateTrigger()
+    DisableTrigger(aiTrg)
+    TriggerRegisterPlayerUnitEventSimple(aiTrg, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(aiTrg, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('h04W')
+            and GetUnitLifePercent(GetAttackedUnitBJ()) <= 80.0
+            and GetUnitManaPercent(GetAttackedUnitBJ()) >= 99.0
+            and levelGen == gen
+    end))
+    TriggerAddAction(aiTrg, function()
+        local u = GetAttackedUnitBJ()
+        for _ = 1, 8 do
+            IssueImmediateOrderBJ(u, "spiritwolf")
+            TriggerSleepAction(2.0)
+        end
+    end)
+    EnableTrigger(aiTrg)
+end
 
 local function spawnLevel(data)
     for _, s in ipairs(data.spawns) do
@@ -399,6 +1060,7 @@ local function onLevelVictory(data, levelIndex)
     LevelBeaten = true
     PlaySoundBJ(snd.RoundClear)
     ThingsToDoImmediatelyFollowingVictory()
+    SupplyStockingItems()  -- sort ground items into cleanup zones if researched (economy/Economy.md §3)
     TimerForNextLevel(LevelData[data.next] and LevelData[data.next].boss or false)
     TriggerSleepAction(0.25)
     DisplayTextToForce(GetPlayersAll(), "|cff00ff00Level " .. levelIndex .. " cleared!|r")
@@ -423,6 +1085,42 @@ local function onLevelVictory(data, levelIndex)
         DisplayTextToForce(GetPlayersAll(),
             "|cffff8800Level " .. (data.next or "?") .. "+ not yet ported (Phase 6 in progress).|r")
     end
+end
+
+-- Victory: player picks up the specific item (e.g. Level 13 drop).
+local function armItemPickupVictory(data, levelIndex)
+    local trg = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(trg, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(trg, Condition(function()
+        return GetItemTypeId(GetManipulatedItem()) == data.victory.item
+    end))
+    TriggerAddAction(trg, function()
+        DisableTrigger(trg)
+        RemoveItem(GetManipulatedItem())
+        local grp = GetUnitsInRectOfPlayer(rct.EntireGameArea, P9)
+        ForGroup(grp, function() RemoveUnit(GetEnumUnit()) end)
+        DestroyGroup(grp)
+        onLevelVictory(data, levelIndex)
+    end)
+    activeVictoryTrigger = trg
+end
+
+-- Victory: fires on Player(9) unit death; checks if the last unit of that type died.
+local function armLastOfTypeVictory(data, levelIndex)
+    local trg = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(trg, P9, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(trg, Condition(function()
+        return GetUnitTypeId(GetDyingUnit()) == data.victory.unit
+            and CountLivingPlayerUnitsOfTypeId(data.victory.unit, P9) == 0
+    end))
+    TriggerAddAction(trg, function()
+        DisableTrigger(trg)
+        local grp = GetUnitsInRectOfPlayer(rct.EntireGameArea, P9)
+        ForGroup(grp, function() RemoveUnit(GetEnumUnit()) end)
+        DestroyGroup(grp)
+        onLevelVictory(data, levelIndex)
+    end)
+    activeVictoryTrigger = trg
 end
 
 local function armClearAllVictory(data, levelIndex)
@@ -484,7 +1182,7 @@ StartLevel = function(n)
     if data.setup then data.setup() end
 
     TriggerSleepAction(1.0)
-    patrolEnemiesToBase()
+    if not data.noAutoPatrol then patrolEnemiesToBase() end
     StartFastVictoriesTimer()
     MusicOn = true
     if data.track then CurrentTrackMusic = data.track end  -- nil = keep previous (e.g. L6 miniboss)
@@ -493,6 +1191,10 @@ StartLevel = function(n)
     TriggerSleepAction(0.75)
     if data.victory.type == 'boss' then
         armBossVictory(data, n)
+    elseif data.victory.type == 'itemPickup' then
+        armItemPickupVictory(data, n)
+    elseif data.victory.type == 'lastOfType' then
+        armLastOfTypeVictory(data, n)
     else
         armClearAllVictory(data, n)
     end

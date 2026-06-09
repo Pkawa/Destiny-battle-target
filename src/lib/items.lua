@@ -129,3 +129,188 @@ function DebugSpawnItem(rarity, x, y)
     if not p then return nil end
     return GetItemName(CreateItem(drawFrom(p), x, y))
 end
+
+-- ── Bulk sell system (war3map.j 25280-25525) ──────────────────────────────────
+-- Buying a tier token from a sell shop enumerates items in the matching zone,
+-- totals their ITEM_IF_MAX_HIT_POINTS field (repurposed as sell value), removes
+-- them, and distributes equally to all active human players.
+function RegisterSellTriggers()
+    local function countActive()
+        local n = 0
+        for i = 0, 7 do
+            local p = Player(i)
+            if GetPlayerController(p) == MAP_CONTROL_USER
+                and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING then
+                n = n + 1
+            end
+        end
+        return n > 0 and n or 1
+    end
+
+    local tiers = {
+        { id = 'I0C6', zone = rct.UncommonSell, msg = "|cff00ff00 has sold all uncommons in the Supply!|r" },
+        { id = 'I0C7', zone = rct.RareSell,     msg = "|cff8080ff has sold all rares in the Supply!|r" },
+        { id = 'I0C8', zone = rct.EpicSell,     msg = "|cffff0000 has sold all epics and artifacts in the supply!|r" },
+        { id = 'I0C9', zone = rct.OtherSell,    msg = "|cffd45e19 has sold all scrolls and \"Other\" items in the supply!|r" },
+    }
+    for _, tier in ipairs(tiers) do
+        local token = FourCC(tier.id)
+        local zone  = tier.zone
+        local msg   = tier.msg
+        local t = CreateTrigger()
+        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SELL_ITEM)
+        TriggerAddCondition(t, Condition(function()
+            return GetItemTypeId(GetSoldItem()) == token
+        end))
+        TriggerAddAction(t, function()
+            local total    = 0
+            local numPlayers = countActive()
+            RemoveItem(GetSoldItem())
+            DisplayTextToForce(GetPlayersAll(),
+                GetPlayerName(GetOwningPlayer(GetBuyingUnit())) .. msg)
+            EnumItemsInRectBJ(zone, function()
+                total = total + BlzGetItemIntegerField(GetEnumItem(), ITEM_IF_MAX_HIT_POINTS)
+                RemoveItem(GetEnumItem())
+            end)
+            local share = total // numPlayers
+            DisplayTextToForce(GetPlayersAll(),
+                "|cff00ff00Total Gold: |r|cffffff00+|r" .. tostring(total))
+            DisplayTextToForce(GetPlayersAll(),
+                "|cff00ff00Your share: |r|cffffff00+|r" .. tostring(share))
+            for i = 0, 7 do
+                local p = Player(i)
+                if GetPlayerController(p) == MAP_CONTROL_USER
+                    and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING then
+                    AdjustPlayerStateBJ(share, p, PLAYER_STATE_RESOURCE_GOLD)
+                end
+            end
+        end)
+    end
+end
+
+-- ── Item Shop (war3map.j 25527-25615) ─────────────────────────────────────────
+-- R00M research builds n004 at rct.ItemShop. R00N upgrades n004→n005→n006.
+function RegisterItemShopTriggers()
+    local function propagate(r, rank)
+        for i = 0, 8 do SetPlayerTechResearchedSwap(FourCC(r), rank, Player(i)) end
+    end
+
+    local shopT = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(shopT, EVENT_PLAYER_UNIT_RESEARCH_FINISH)
+    TriggerAddCondition(shopT, Condition(function()
+        return GetResearched() == FourCC('R00M')
+    end))
+    TriggerAddAction(shopT, function()
+        PlaySoundBJ(snd.ResurrectTarget)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(GetOwningPlayer(GetResearchingUnit()))
+            .. " has researched Item Shop (Creates an Item Shop that players may purchase potions from for free.)")
+        propagate('R00M', 1)
+        CreateNUnitsAtLoc(1, FourCC('n004'), Player(PLAYER_NEUTRAL_PASSIVE),
+            GetRectCenter(rct.ItemShop), bj_UNIT_FACING)
+    end)
+
+    local upgradeT = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(upgradeT, EVENT_PLAYER_UNIT_RESEARCH_FINISH)
+    TriggerAddCondition(upgradeT, Condition(function()
+        return GetResearched() == FourCC('R00N')
+    end))
+    TriggerAddAction(upgradeT, function()
+        PlaySoundBJ(snd.ResurrectTarget)
+        local name = GetPlayerName(GetOwningPlayer(GetResearchingUnit()))
+        if ItemSHopUpgrade == 1 then
+            ItemSHopUpgrade = 2
+            DisplayTextToForce(GetPlayersAll(),
+                name .. " has researched Land Route Trade! (The Item Shop selection and restock times have improved further!)")
+            propagate('R00N', 2)
+            ReplaceUnitBJ(GroupPickRandomUnit(GetUnitsOfTypeIdAll(FourCC('n005'))),
+                FourCC('n006'), bj_UNIT_STATE_METHOD_RELATIVE)
+        else
+            ItemSHopUpgrade = 1
+            DisplayTextToForce(GetPlayersAll(),
+                name .. " has researched Overseas Trade! (The Item Shop selection and restock times have improved!)")
+            propagate('R00N', 1)
+            ReplaceUnitBJ(GroupPickRandomUnit(GetUnitsOfTypeIdAll(FourCC('n004'))),
+                FourCC('n005'), bj_UNIT_STATE_METHOD_RELATIVE)
+        end
+    end)
+end
+
+-- ── Supply Stocking (war3map.j 24465-24748) ───────────────────────────────────
+-- SupplyStockingItems: called at level end; sorts ground items from stocking
+-- zones into tiered cleanup zones by item level. Level 1=unc, 2=rare,
+-- 3/4=epic/arti, other=scrolls/stones. Called from onLevelVictory in levels.lua.
+function SupplyStockingItems()
+    if not ItemCleanUpOn then return end
+    local function sortItem()
+        local item = GetEnumItem()
+        local lvl  = GetItemLevel(item)
+        local dest
+        if lvl == 1 then
+            dest = GetRandomLocInRect(rct.ItemCleanupUNC)
+        elseif lvl == 2 then
+            dest = GetRandomLocInRect(rct.ItemCleanupRare)
+        elseif lvl == 3 or lvl == 4 then
+            dest = GetRandomLocInRect(rct.ItemCleanupEpicArti)
+        else
+            dest = GetRandomLocInRect(rct.ItemCleanupScrollStones)
+        end
+        SetItemPositionLoc(item, dest)
+        RemoveLocation(dest)
+    end
+    EnumItemsInRectBJ(rct.SupplyStockingA, sortItem)
+    EnumItemsInRectBJ(rct.SupplyStockingB, sortItem)
+    EnumItemsInRectBJ(rct.SupplyStocking3, sortItem)
+end
+
+-- R00J research: enable stocking + add Retrieve ability to all h02W depots.
+-- A0KE cast: move items near the caster's owner hero to near the depot building.
+function RegisterSupplyStockingTriggers()
+    local stockT = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(stockT, EVENT_PLAYER_UNIT_RESEARCH_FINISH)
+    TriggerAddCondition(stockT, Condition(function()
+        return GetResearched() == FourCC('R00J')
+    end))
+    TriggerAddAction(stockT, function()
+        PlaySoundBJ(snd.ResurrectTarget)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(GetOwningPlayer(GetResearchingUnit()))
+            .. " has researched Supply Stocking! |cff00ff00(Items are sorted and brought to base at the end of every level.)|r")
+        for i = 0, 7 do
+            local p = Player(i)
+            if GetPlayerController(p) == MAP_CONTROL_USER
+                and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING then
+                SetPlayerTechResearchedSwap(FourCC('R00J'), 1, p)
+            end
+        end
+        ItemCleanUpOn = true
+        local depots = GetUnitsOfTypeIdAll(FourCC('h02W'))
+        ForGroup(depots, function() UnitAddAbilityBJ(FourCC('A0KE'), GetEnumUnit()) end)
+        DestroyGroup(depots)
+    end)
+
+    local retrieveT = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(retrieveT, EVENT_PLAYER_UNIT_SPELL_EFFECT)
+    TriggerAddCondition(retrieveT, Condition(function()
+        return GetSpellAbilityId() == FourCC('A0KE')
+    end))
+    TriggerAddAction(retrieveT, function()
+        local caster = GetSpellAbilityUnit()
+        local owner  = GetOwningPlayer(caster)
+        local heroes = { P1Hero, P2Hero, P3Hero, P4Hero, P5Hero, P6Hero, P7Hero, P8Hero }
+        for _, hero in ipairs(heroes) do
+            if hero and GetOwningPlayer(hero) == owner then
+                local cx = GetUnitX(hero)
+                local cy = GetUnitY(hero)
+                local zone = Rect(cx - 125.0, cy - 125.0, cx + 125.0, cy + 125.0)
+                local dest = Location(GetUnitX(caster), GetUnitY(caster) + 150.0)
+                EnumItemsInRectBJ(zone, function()
+                    SetItemPositionLoc(GetEnumItem(), dest)
+                end)
+                RemoveRect(zone)
+                RemoveLocation(dest)
+                break
+            end
+        end
+    end)
+end

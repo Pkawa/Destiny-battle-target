@@ -57,6 +57,11 @@ RegisterItemDropTriggers()
 -- Register loot-box purchases (buy a box token from a base shop -> random pool item)
 RegisterPurchaseTriggers()
 
+-- Register bulk sell, item shop, and supply stocking systems (economy/Economy.md §3-6)
+RegisterSellTriggers()
+RegisterItemShopTriggers()
+RegisterSupplyStockingTriggers()
+
 -- Register misc/flavor systems (hero level-up floaters)
 RegisterMiscTriggers()
 
