@@ -486,6 +486,7 @@ function BeginningStart2()
     -- (EndIntroMusic below), then vanilla gameplay music takes over.
     AntiDuplicateTxt = true
     PauseAllUnitsBJ(false)
+    KickCompanionPatrol()  -- (re)start Sir Joshua now units are unpaused (pre-game pause dropped his order)
 
     TriggerSleepAction(5.0)
 

@@ -25,6 +25,13 @@ local function orderCompanion(order, rect)
     DestroyGroup(g)
 end
 
+-- Start (or restart) the patrol circuit. Called at gameplay start, because the pre-game
+-- PauseAllUnitsBJ(true)/(false) cycle drops the order issued when he first spawned.
+-- No-op if no companion exists (random/pick mode where Player 1 is human).
+function KickCompanionPatrol()
+    orderCompanion("patrol", rct.VernPatrolB)
+end
+
 -- Registered once, when the companion is spawned (story/battle/solo modes only).
 function RegisterCompanionAI()
     -- ── Patrol circuit: A → B → C → D → A (war3map.j UH_Patrol_Copy chain) ──
