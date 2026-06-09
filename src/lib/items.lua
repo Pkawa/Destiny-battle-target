@@ -118,3 +118,14 @@ function RegisterPurchaseTriggers()
         UnitAddItemByIdSwapped(drawFrom(Lv1Epic), GetManipulatingUnit())
     end)
 end
+
+-- Debug helper: drop a random Lv1 item of the given rarity at (x,y). Returns its name or nil.
+local DEBUG_POOLS = {
+    unc = Lv1Uncommon, uncommon = Lv1Uncommon, rare = Lv1Rare,
+    epic = Lv1Epic, arti = Lv1Artifact, artifact = Lv1Artifact, mythic = Lv1Artifact,
+}
+function DebugSpawnItem(rarity, x, y)
+    local p = DEBUG_POOLS[rarity]
+    if not p then return nil end
+    return GetItemName(CreateItem(drawFrom(p), x, y))
+end

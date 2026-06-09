@@ -4,7 +4,8 @@
 --
 -- Flow: Mode Type → Difficulty → Random/Pick mode → Hero pick → Feats → BeginningStart2 → Level 1
 
-local function AssignHero(unit, playerIndex)
+-- Global so debug.lua (-repick) can reassign a hero. playerIndex 0-7 -> P1Hero..P8Hero.
+function AssignHero(unit, playerIndex)
     if playerIndex == 0 then P1Hero = unit
     elseif playerIndex == 1 then P2Hero = unit
     elseif playerIndex == 2 then P3Hero = unit

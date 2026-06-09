@@ -407,6 +407,11 @@ local function onLevelVictory(data, levelIndex)
     LevelBeaten = false
     DestroyNextLevelTimer()
 
+    if DebugNoAutoAdvance then   -- debug -stop: don't auto-start the next level
+        DisplayTextToForce(GetPlayersAll(),
+            "|cffaaaaaa[debug] auto-advance off — use -wave to start the next level.|r")
+        return
+    end
     if data.next and LevelData[data.next] then
         CurrentLevel = data.next
         StartLevel(data.next)
