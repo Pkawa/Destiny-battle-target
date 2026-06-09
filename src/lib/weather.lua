@@ -4,9 +4,30 @@
 -- visual weather plays over the map for 90s with a flavor announce. The Meteorologist feat
 -- (MeteorlogistFeatOn) gives a 50% chance to cancel a rolled *negative* weather.
 --
--- Ported: the roll + visual weather + names + Meteorologist deny. ⬜ Deferred: the
--- mechanical sub-effects (Acid Rain damage, Mageslayer anti-caster, Mute silence, Heat
--- Wave, Fortune loot mods, etc.) — read the cited Weather_NN_* / sub-triggers when adding.
+-- Ported: the roll + visual weather + names + Meteorologist deny + the mechanical
+-- sub-effects (Acid Rain damage, Mageslayer drain, Mute silence, Fortune loot mods, etc.).
+
+-- ── Shared helpers (declared before the mechEffect closures that capture them) ───
+
+-- Apply fn (using GetEnumUnit()) to every non-P8/P9 non-structure unit on the map.
+local function allPlayerUnits(fn)
+    ForUnitsInRect(GetPlayableMapRect(), function()
+        return GetOwningPlayer(GetFilterUnit()) ~= Player(8)
+            and GetOwningPlayer(GetFilterUnit()) ~= Player(9)
+            and not IsUnitType(GetFilterUnit(), UNIT_TYPE_STRUCTURE)
+    end, fn)
+end
+
+-- Spawn a temporary weather-entity unit at WeatherTarget and remove it after `dur` seconds.
+local function spawnWeatherUnit(unitId, dur)
+    CreateNUnitsAtLoc(1, FourCC(unitId), Player(11),
+        GetRectCenter(rct.WeatherTarget), bj_UNIT_FACING)
+    After(dur, function()
+        local grp = GetUnitsOfPlayerAndTypeId(Player(11), FourCC(unitId))
+        ForGroup(grp, function() RemoveUnit(GetEnumUnit()) end)
+        DestroyGroup(grp)
+    end)
+end
 
 -- W[n] = { name, negative, effect = WC3 weather FourCC (or nil for a text-only weather) }
 local W = {}
@@ -36,10 +57,9 @@ w(31, "Fortune's Gloom",      true,  nil)
 -- W15 Acid Rain: -1% HP every 5s for 90s to all non-P8/P9 non-structure units.
 W[15].mechEffect = function()
     local tick, gen = 0, RandomWeather
-    local t = CreateTimer()
-    TimerStart(t, 5.0, true, function()
+    Every(5.0, function()
         tick = tick + 1
-        if RandomWeather ~= gen or tick > 18 then DestroyTimer(t); return end
+        if RandomWeather ~= gen or tick > 18 then return true end   -- stop
         allPlayerUnits(function()
             local u = GetEnumUnit()
             local hp = GetUnitStateSwap(UNIT_STATE_LIFE, u)
@@ -84,10 +104,9 @@ W[23].mechEffect = function() spawnWeatherUnit('e00F', 90.0) end
 -- W24 Mageslayer Mists: drain 20 mana from all non-P8/P9 non-structure units every 5s for 90s.
 W[24].mechEffect = function()
     local tick, gen = 0, RandomWeather
-    local t = CreateTimer()
-    TimerStart(t, 5.0, true, function()
+    Every(5.0, function()
         tick = tick + 1
-        if RandomWeather ~= gen or tick > 18 then DestroyTimer(t); return end
+        if RandomWeather ~= gen or tick > 18 then return true end   -- stop
         allPlayerUnits(function()
             local u = GetEnumUnit()
             local mana = GetUnitStateSwap(UNIT_STATE_MANA, u)
@@ -109,21 +128,15 @@ W[26].mechEffect = function()
         "ReplaceableTextures\\CameraMasks\\Black_mask.blp",
         100, 100, 100, 100, 0, 0, 0, 35.0)
     DisplayCineFilterBJ(true)
-    local t = CreateTimer()
-    TimerStart(t, 90.0, false, function()
-        DisplayCineFilterBJ(false)
-        DestroyTimer(t)
-    end)
+    After(90.0, function() DisplayCineFilterBJ(false) end)
 end
 
 -- W27 Dryad's Tears: boosts energy regen (+2) for 90s (EnergyRegenTotal system).
 W[27].mechEffect = function()
     EnergyRegenTotal = EnergyRegenTotal + 2
     local gen = RandomWeather
-    local t = CreateTimer()
-    TimerStart(t, 90.0, false, function()
+    After(90.0, function()
         if RandomWeather == gen then EnergyRegenTotal = EnergyRegenTotal - 2 end
-        DestroyTimer(t)
     end)
 end
 
@@ -143,10 +156,8 @@ end
 W[30].mechEffect = function()
     ItemDropTotal = ItemDropTotal - 5
     local gen = RandomWeather
-    local t = CreateTimer()
-    TimerStart(t, 60.0, false, function()
+    After(60.0, function()
         if RandomWeather == gen then ItemDropTotal = ItemDropTotal + 5 end
-        DestroyTimer(t)
     end)
 end
 
@@ -154,10 +165,8 @@ end
 W[31].mechEffect = function()
     ItemDropTotal = ItemDropTotal + 5
     local gen = RandomWeather
-    local t = CreateTimer()
-    TimerStart(t, 60.0, false, function()
+    After(60.0, function()
         if RandomWeather == gen then ItemDropTotal = ItemDropTotal - 5 end
-        DestroyTimer(t)
     end)
 end
 
@@ -169,38 +178,12 @@ local function applyWeather(entry)
         if activeWeather then RemoveWeatherEffect(activeWeather) end
         activeWeather = AddWeatherEffectSaveLast(rct.EntireGameArea, entry.effect)
         local e = activeWeather
-        local t = CreateTimer()
-        TimerStart(t, 90.0, false, function()
+        After(90.0, function()
             if activeWeather == e then activeWeather = nil end
             RemoveWeatherEffect(e)
-            DestroyTimer(t)
         end)
     end
     if entry.mechEffect then entry.mechEffect() end
-end
-
--- Helper: filter non-P8/P9 non-structure units across the map.
-local function allPlayerUnits(fn)
-    local grp = GetUnitsInRectMatching(GetPlayableMapRect(), Condition(function()
-        return GetOwningPlayer(GetFilterUnit()) ~= Player(8)
-            and GetOwningPlayer(GetFilterUnit()) ~= Player(9)
-            and not IsUnitType(GetFilterUnit(), UNIT_TYPE_STRUCTURE)
-    end))
-    ForGroup(grp, fn)
-    DestroyGroup(grp)
-end
-
--- Helper: spawn a temporary weather-entity unit at WeatherTarget and remove it after `dur` seconds.
-local function spawnWeatherUnit(unitId, dur)
-    local u = CreateNUnitsAtLoc(1, FourCC(unitId), Player(11),
-        GetRectCenter(rct.WeatherTarget), bj_UNIT_FACING)
-    local t = CreateTimer()
-    TimerStart(t, dur, false, function()
-        local grp = GetUnitsOfPlayerAndTypeId(Player(11), FourCC(unitId))
-        ForGroup(grp, function() RemoveUnit(GetEnumUnit()) end)
-        DestroyGroup(grp)
-        DestroyTimer(t)
-    end)
 end
 
 -- Roll and apply a level's weather. Called after each level starts (levels.lua).

@@ -1,3 +1,4 @@
+require('lib.util')
 require('lib.globals')
 require('lib.regions')
 require('lib.sounds')

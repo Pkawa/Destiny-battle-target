@@ -13,27 +13,79 @@
 --   trg_ManAtArmsPayRaise                   — called when WageTotal updates
 --   trg_RogueApprenticeAssassin / Veteran / Master — start disabled; Assassinate system enables
 
+-- ── Detection archetype factories ─────────────────────────────────────────────
+-- The 23 most repetitive triggers reduce to four shapes. Per-class flags/counters/
+-- player handles stay as individual globals (the contract shared with BonusesAndUpkeep,
+-- feats.lua, and Phase-7 ability code), so the factories address them by name via _G.
+-- Each trigger disables itself once its milestone latches; the flag is reset by the
+-- payout pass in levels.lua. (The remaining ~29 triggers have per-trigger quirks and
+-- stay written out explicitly below.)
+
+-- Count casts of `abil`; once the counter exceeds `threshold`, latch flag + caster's owner.
+local function spellCounter(abil, counter, threshold, flag, playerVar)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC(abil)
+    end, function()
+        if _G[counter] > threshold then
+            DisableTrigger(GetTriggeringTrigger())
+            _G[flag] = true
+            _G[playerVar] = GetOwningPlayer(GetSpellAbilityUnit())
+        else
+            _G[counter] = _G[counter] + 1
+        end
+    end)
+end
+
+-- Cast `abil` on a DIFFERENT hero (not `selfType`) at/below `hpThreshold` life → latch.
+local function spellOnOtherHero(abil, selfType, hpThreshold, flag, playerVar)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC(abil)
+    end, function()
+        local tgt = GetSpellTargetUnit()
+        if GetUnitTypeId(tgt) ~= FourCC(selfType)
+            and GetUnitStateSwap(UNIT_STATE_LIFE, tgt) <= hpThreshold
+            and IsUnitType(tgt, UNIT_TYPE_HERO) then
+            DisableTrigger(GetTriggeringTrigger())
+            _G[flag] = true
+            _G[playerVar] = GetOwningPlayer(GetSpellAbilityUnit())
+        end
+    end)
+end
+
+-- Learn `abil` to its 4th rank → latch. `playerVar` may be nil (some classes don't set it).
+local function skillRankCounter(abil, counter, flag, playerVar)
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC(abil)
+    end, function()
+        _G[counter] = _G[counter] + 1
+        if _G[counter] == 4 then
+            DisableTrigger(GetTriggeringTrigger())
+            _G[flag] = true
+            if playerVar then _G[playerVar] = GetOwningPlayer(GetLearningUnit()) end
+        end
+    end)
+end
+
+-- `killerType` gets `threshold`+1 kills → latch flag + the killer's owner.
+local function killCounter(killerType, counter, threshold, flag, playerVar)
+    OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetKillingUnitBJ()) == FourCC(killerType)
+    end, function()
+        if _G[counter] > threshold then
+            DisableTrigger(GetTriggeringTrigger())
+            _G[playerVar] = GetOwningPlayer(GetKillingUnitBJ())
+            _G[flag] = true
+        else
+            _G[counter] = _G[counter] + 1
+        end
+    end)
+end
+
 function RegisterAchievementTriggers()
 
     -- ── Cleric of Order ───────────────────────────────────────────────────────
     -- BonusA: cast Heal (A002) on a different hero at ≤75 HP (JASS 7486)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A002')
-        end))
-        TriggerAddAction(t, function()
-            local tgt = GetSpellTargetUnit()
-            if GetUnitTypeId(tgt) ~= FourCC('H001')
-                and GetUnitStateSwap(UNIT_STATE_LIFE, tgt) <= 75
-                and IsUnitType(tgt, UNIT_TYPE_HERO) then
-                DisableTrigger(GetTriggeringTrigger())
-                ClericofOrderBonusA = true
-                ClericofOrderPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            end
-        end)
-    end
+    spellOnOtherHero('A002', 'H001', 75, 'ClericofOrderBonusA', 'ClericofOrderPlayer')
 
     -- BonusB: cast Mark of Order (A001) when target has >9 units within 350 (JASS 7529)
     do
@@ -77,22 +129,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: cast Flurry of Slingstones (A005) >25 times (JASS 7609)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A005')
-        end))
-        TriggerAddAction(t, function()
-            if ClericSmallFolkSlingshotBonus > 24 then
-                DisableTrigger(GetTriggeringTrigger())
-                ClericOTSFBonusB = true
-                ClericOTSFPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                ClericSmallFolkSlingshotBonus = ClericSmallFolkSlingshotBonus + 1
-            end
-        end)
-    end
+    spellCounter('A005', 'ClericSmallFolkSlingshotBonus', 24, 'ClericOTSFBonusB', 'ClericOTSFPlayer')
 
     -- ── Dwarven Axemaster ─────────────────────────────────────────────────────
     -- BonusA: Living Axe (h00A/h009/h008) kills 10+ units (JASS 7646)
@@ -115,20 +152,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: all 4 ranks of Aggression (A00C) learned (JASS 7696)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_HERO_SKILL)
-        TriggerAddCondition(t, Condition(function()
-            return GetLearnedSkillBJ() == FourCC('A00C')
-        end))
-        TriggerAddAction(t, function()
-            Aggression = Aggression + 1
-            if Aggression == 4 then
-                DisableTrigger(GetTriggeringTrigger())
-                DwarvenAxeMasterBonusB = true
-            end
-        end)
-    end
+    skillRankCounter('A00C', 'Aggression', 'DwarvenAxeMasterBonusB')
 
     -- ── Monk of the Ebony Fist ────────────────────────────────────────────────
     -- BonusA: cast Chakra Burst (A00H) with >4 heroes within 600 (JASS 7733)
@@ -224,59 +248,14 @@ function RegisterAchievementTriggers()
 
     -- ── Master of the Art ─────────────────────────────────────────────────────
     -- BonusA: Blast (A00K) used 50+ times (JASS 7900)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A00K')
-        end))
-        TriggerAddAction(t, function()
-            if BlastCast > 49 then
-                DisableTrigger(GetTriggeringTrigger())
-                MasterOTABonusA = true
-                MasterOfTheArtPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                BlastCast = BlastCast + 1
-            end
-        end)
-    end
+    spellCounter('A00K', 'BlastCast', 49, 'MasterOTABonusA', 'MasterOfTheArtPlayer')
 
     -- BonusB: Essence Shock (A00L) used 35+ times (JASS 7937)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A00L')
-        end))
-        TriggerAddAction(t, function()
-            if EssenceShockCast > 34 then
-                DisableTrigger(GetTriggeringTrigger())
-                MasterOTABonusB = true
-                MasterOfTheArtPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                EssenceShockCast = EssenceShockCast + 1
-            end
-        end)
-    end
+    spellCounter('A00L', 'EssenceShockCast', 34, 'MasterOTABonusB', 'MasterOfTheArtPlayer')
 
     -- ── Feral Archon ──────────────────────────────────────────────────────────
     -- BonusA: Tantrum (A00X) used 5+ times (JASS 7974)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A00X')
-        end))
-        TriggerAddAction(t, function()
-            if TantrumCast > 4 then
-                DisableTrigger(GetTriggeringTrigger())
-                FeralArchonBonus = true
-                FeralArchonPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                TantrumCast = TantrumCast + 1
-            end
-        end)
-    end
+    spellCounter('A00X', 'TantrumCast', 4, 'FeralArchonBonus', 'FeralArchonPlayer')
 
     -- BonusB: O000 (Feral Archon) kills a hero (JASS 8011)
     do
@@ -319,22 +298,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: Violent Engineer — H00F kills 40+ units (JASS 8040)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
-        TriggerAddCondition(t, Condition(function()
-            return GetUnitTypeId(GetKillingUnitBJ()) == FourCC('H00F')
-        end))
-        TriggerAddAction(t, function()
-            if TotalEngyKills > 39 then
-                DisableTrigger(GetTriggeringTrigger())
-                HumanEngineerPlayer = GetOwningPlayer(GetKillingUnitBJ())
-                HumanEngineerBonusB = true
-            else
-                TotalEngyKills = TotalEngyKills + 1
-            end
-        end)
-    end
+    killCounter('H00F', 'TotalEngyKills', 39, 'HumanEngineerBonusB', 'HumanEngineerPlayer')
 
     -- ── Earthen Templar ───────────────────────────────────────────────────────
     -- BonusA: Rage of Earth — >5 living Earth Elementals (h011) on map (JASS 8110)
@@ -361,22 +325,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: Supreme Smasher — H00S kills 100+ units (JASS 8150)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
-        TriggerAddCondition(t, Condition(function()
-            return GetUnitTypeId(GetKillingUnitBJ()) == FourCC('H00S')
-        end))
-        TriggerAddAction(t, function()
-            if TotalETKills > 99 then
-                DisableTrigger(GetTriggeringTrigger())
-                EarthenTemplarPlayer = GetOwningPlayer(GetKillingUnitBJ())
-                EarthenTemplarBonusB = true
-            else
-                TotalETKills = TotalETKills + 1
-            end
-        end)
-    end
+    killCounter('H00S', 'TotalETKills', 99, 'EarthenTemplarBonusB', 'EarthenTemplarPlayer')
 
     -- ── Man-at-Arms ───────────────────────────────────────────────────────────
     -- BonusA: Pay Raise — WageTotal >= 500 (JASS 8205)
@@ -394,22 +343,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: Hoarse Throat — Battle Shout (A024) used 15+ times (JASS 8215)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A024')
-        end))
-        TriggerAddAction(t, function()
-            if BattleShoutCount > 14 then
-                DisableTrigger(GetTriggeringTrigger())
-                ManAtArmsBonusB = true
-                ManAtArmsPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                BattleShoutCount = BattleShoutCount + 1
-            end
-        end)
-    end
+    spellCounter('A024', 'BattleShoutCount', 14, 'ManAtArmsBonusB', 'ManAtArmsPlayer')
 
     -- ── Sun Soul ──────────────────────────────────────────────────────────────
     -- Penalty: E004 kills an ally hero (JASS 8252)
@@ -431,96 +365,21 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusA: Solar Barrier (A02G) used 10+ times (JASS 8286)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A02G')
-        end))
-        TriggerAddAction(t, function()
-            if SolarCount > 9 then
-                DisableTrigger(GetTriggeringTrigger())
-                SunSoulPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-                SunSoulBonusA = true
-            else
-                SolarCount = SolarCount + 1
-            end
-        end)
-    end
+    spellCounter('A02G', 'SolarCount', 9, 'SunSoulBonusA', 'SunSoulPlayer')
 
     -- BonusB: Sunbeam (A02F) used 15+ times (JASS 8323)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A02F')
-        end))
-        TriggerAddAction(t, function()
-            if SunbeamCount > 14 then
-                DisableTrigger(GetTriggeringTrigger())
-                SunSoulPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-                SunSoulBonusB = true
-            else
-                SunbeamCount = SunbeamCount + 1
-            end
-        end)
-    end
+    spellCounter('A02F', 'SunbeamCount', 14, 'SunSoulBonusB', 'SunSoulPlayer')
 
     -- ── Paladin of Justice ────────────────────────────────────────────────────
     -- BonusA: Holy Healer — Lay on Hands (A02M) on another hero at ≤175 HP (JASS 8360)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A02M')
-        end))
-        TriggerAddAction(t, function()
-            local tgt = GetSpellTargetUnit()
-            if GetUnitTypeId(tgt) ~= FourCC('H01J')
-                and GetUnitStateSwap(UNIT_STATE_LIFE, tgt) <= 175
-                and IsUnitType(tgt, UNIT_TYPE_HERO) then
-                DisableTrigger(GetTriggeringTrigger())
-                PaladinJusticeBonusA = true
-                PaladinJusticePlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            end
-        end)
-    end
+    spellOnOtherHero('A02M', 'H01J', 175, 'PaladinJusticeBonusA', 'PaladinJusticePlayer')
 
     -- BonusB: Crusader — H01J kills 50+ units (JASS 8403)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
-        TriggerAddCondition(t, Condition(function()
-            return GetUnitTypeId(GetKillingUnitBJ()) == FourCC('H01J')
-        end))
-        TriggerAddAction(t, function()
-            if TotalPoJKills > 49 then
-                DisableTrigger(GetTriggeringTrigger())
-                PaladinJusticePlayer = GetOwningPlayer(GetKillingUnitBJ())
-                PaladinJusticeBonusB = true
-            else
-                TotalPoJKills = TotalPoJKills + 1
-            end
-        end)
-    end
+    killCounter('H01J', 'TotalPoJKills', 49, 'PaladinJusticeBonusB', 'PaladinJusticePlayer')
 
     -- ── Dwarven Rockfighter ───────────────────────────────────────────────────
     -- BonusA: Titan Strength — all 4 ranks of Dwarven Stamina (A037) (JASS 8440)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_HERO_SKILL)
-        TriggerAddCondition(t, Condition(function()
-            return GetLearnedSkillBJ() == FourCC('A037')
-        end))
-        TriggerAddAction(t, function()
-            DwarvenStamina = DwarvenStamina + 1
-            if DwarvenStamina == 4 then
-                DisableTrigger(GetTriggeringTrigger())
-                DwarvenRFBonusA = true
-                DwarvenRFPlayer = GetOwningPlayer(GetLearningUnit())
-            end
-        end)
-    end
+    skillRankCounter('A037', 'DwarvenStamina', 'DwarvenRFBonusA', 'DwarvenRFPlayer')
 
     -- BonusB: Fearful Presence — Intimidating Shout (A035) hits >9 P9 living units (JASS 8478)
     do
@@ -551,77 +410,18 @@ function RegisterAchievementTriggers()
     -- ── Disciple of Grace ─────────────────────────────────────────────────────
     -- BonusA: Aura of Grace — Moonbeam Rejuvenation (A039) used 20+ times (JASS 8528)
     -- BonusB (Death Ward save) is handled in feats.lua when the Disciple feat is picked.
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A039')
-        end))
-        TriggerAddAction(t, function()
-            if DiscipleMRCount > 19 then
-                DisableTrigger(GetTriggeringTrigger())
-                DiscipleBonusA = true
-                DisciplePlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                DiscipleMRCount = DiscipleMRCount + 1
-            end
-        end)
-    end
+    spellCounter('A039', 'DiscipleMRCount', 19, 'DiscipleBonusA', 'DisciplePlayer')
 
     -- ── Arcane Archer ─────────────────────────────────────────────────────────
     -- BonusA: Power Shot — all 4 ranks of Far Shot (A03J) learned (JASS 8565)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_HERO_SKILL)
-        TriggerAddCondition(t, Condition(function()
-            return GetLearnedSkillBJ() == FourCC('A03J')
-        end))
-        TriggerAddAction(t, function()
-            FarShotTotal = FarShotTotal + 1
-            if FarShotTotal == 4 then
-                DisableTrigger(GetTriggeringTrigger())
-                ArcaneArcherBonusA = true
-                ArcaneArcherPlayer = GetOwningPlayer(GetLearningUnit())
-            end
-        end)
-    end
+    skillRankCounter('A03J', 'FarShotTotal', 'ArcaneArcherBonusA', 'ArcaneArcherPlayer')
 
     -- BonusB: Sniper — Eagle Arrow (A03I) used 15+ times (JASS 8603)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A03I')
-        end))
-        TriggerAddAction(t, function()
-            if EagleArrowTotal > 14 then
-                DisableTrigger(GetTriggeringTrigger())
-                ArcaneArcherBonusB = true
-                ArcaneArcherPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                EagleArrowTotal = EagleArrowTotal + 1
-            end
-        end)
-    end
+    spellCounter('A03I', 'EagleArrowTotal', 14, 'ArcaneArcherBonusB', 'ArcaneArcherPlayer')
 
     -- ── Axe Brother ───────────────────────────────────────────────────────────
     -- BonusA: Whirling Dervish — Whirlwind Attack (A03M) used 20+ times (JASS 8640)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A03M')
-        end))
-        TriggerAddAction(t, function()
-            if WhirlwindAttack > 19 then
-                DisableTrigger(GetTriggeringTrigger())
-                AxeBrotherBonusA = true
-                AxeBrotherPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                WhirlwindAttack = WhirlwindAttack + 1
-            end
-        end)
-    end
+    spellCounter('A03M', 'WhirlwindAttack', 19, 'AxeBrotherBonusA', 'AxeBrotherPlayer')
 
     -- BonusB: Savage Fighter — Decimate procs 50+ times (JASS 8677)
     -- No event. Called by Decimate proc trigger via TriggerExecute(trg_AxeBrotherSavageFighter).
@@ -697,77 +497,17 @@ function RegisterAchievementTriggers()
 
     -- ── Cleric of Elven Word ──────────────────────────────────────────────────
     -- BonusA: Mender — Regrowth (A05D) on another hero at ≤100 HP (JASS 8803)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A05D')
-        end))
-        TriggerAddAction(t, function()
-            local tgt = GetSpellTargetUnit()
-            if GetUnitTypeId(tgt) ~= FourCC('H02C')
-                and GetUnitStateSwap(UNIT_STATE_LIFE, tgt) <= 100
-                and IsUnitType(tgt, UNIT_TYPE_HERO) then
-                DisableTrigger(GetTriggeringTrigger())
-                ClericElvenWordBonusA = true
-                ClericEWPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            end
-        end)
-    end
+    spellOnOtherHero('A05D', 'H02C', 100, 'ClericElvenWordBonusA', 'ClericEWPlayer')
 
     -- BonusB: Mistress of Blessings — Elven Blessing (A05C) used 10+ times (JASS 8846)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A05C')
-        end))
-        TriggerAddAction(t, function()
-            if ElvenBlessingCount > 9 then
-                DisableTrigger(GetTriggeringTrigger())
-                ClericElvenWordBonusB = true
-                ClericEWPlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                ElvenBlessingCount = ElvenBlessingCount + 1
-            end
-        end)
-    end
+    spellCounter('A05C', 'ElvenBlessingCount', 9, 'ClericElvenWordBonusB', 'ClericEWPlayer')
 
     -- ── Crested Drake ─────────────────────────────────────────────────────────
     -- BonusA: Firebreather — Flame Wreath (A05F) used 25+ times (JASS 8883)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SPELL_CAST)
-        TriggerAddCondition(t, Condition(function()
-            return GetSpellAbilityId() == FourCC('A05F')
-        end))
-        TriggerAddAction(t, function()
-            if FlameWreathCount > 24 then
-                DisableTrigger(GetTriggeringTrigger())
-                CrestedDrakeBonusA = true
-                CrestedDrakePlayer = GetOwningPlayer(GetSpellAbilityUnit())
-            else
-                FlameWreathCount = FlameWreathCount + 1
-            end
-        end)
-    end
+    spellCounter('A05F', 'FlameWreathCount', 24, 'CrestedDrakeBonusA', 'CrestedDrakePlayer')
 
     -- BonusB: Fangterror — all 4 ranks of Drakefang (A05H) learned (JASS 8920)
-    do
-        local t = CreateTrigger()
-        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_HERO_SKILL)
-        TriggerAddCondition(t, Condition(function()
-            return GetLearnedSkillBJ() == FourCC('A05H')
-        end))
-        TriggerAddAction(t, function()
-            DrakeFangCount = DrakeFangCount + 1
-            if DrakeFangCount == 4 then
-                DisableTrigger(GetTriggeringTrigger())
-                CrestedDrakeBonusB = true
-                CrestedDrakePlayer = GetOwningPlayer(GetLearningUnit())
-            end
-        end)
-    end
+    skillRankCounter('A05H', 'DrakeFangCount', 'CrestedDrakeBonusB', 'CrestedDrakePlayer')
 
     -- ── Reckless Pyromancer ───────────────────────────────────────────────────
     -- Penalty: E00E kills an ally hero with a spell (JASS 8958)

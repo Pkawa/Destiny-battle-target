@@ -4,17 +4,9 @@
 --
 -- Flow: Mode Type → Difficulty → Random/Pick mode → Hero pick → Feats → BeginningStart2 → Level 1
 
--- Global so debug.lua (-repick) can reassign a hero. playerIndex 0-7 -> P1Hero..P8Hero.
+-- Global so debug.lua (-repick) can reassign a hero. playerIndex 0-7 -> Heroes[1..8].
 function AssignHero(unit, playerIndex)
-    if playerIndex == 0 then P1Hero = unit
-    elseif playerIndex == 1 then P2Hero = unit
-    elseif playerIndex == 2 then P3Hero = unit
-    elseif playerIndex == 3 then P4Hero = unit
-    elseif playerIndex == 4 then P5Hero = unit
-    elseif playerIndex == 5 then P6Hero = unit
-    elseif playerIndex == 6 then P7Hero = unit
-    elseif playerIndex == 7 then P8Hero = unit
-    end
+    Heroes[playerIndex + 1] = unit
 end
 
 -- Global so level1.lua and other modules can use it
@@ -47,8 +39,8 @@ end
 
 -- Spawn NPC blue-player hero (H04Y) for story/battle/solo modes
 local function SpawnBlueCompanion()
-    CreateUnit(Player(1), FourCC('H04Y'), GetRectCenterX(rct.VernPatrolA), GetRectCenterY(rct.VernPatrolA), bj_UNIT_FACING)
-    P2Hero = GetLastCreatedUnit()
+    Heroes[2] = CreateUnit(Player(1), FourCC('H04Y'),
+        GetRectCenterX(rct.VernPatrolA), GetRectCenterY(rct.VernPatrolA), bj_UNIT_FACING)
     AdjustPlayerStateBJ(325, Player(1), PLAYER_STATE_RESOURCE_GOLD)
     RegisterCompanionAI()  -- patrol circuit + heal/defend behaviors (lib/companion.lua)
 end

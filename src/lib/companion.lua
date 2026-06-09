@@ -1,4 +1,4 @@
--- Blue NPC companion "Sir Joshua" (H04Y / P2Hero) AI.
+-- Blue NPC companion "Sir Joshua" (H04Y / Heroes[2]) AI.
 -- Requirements: systems/BluePlayerCompanion.md
 -- Source lines: war3map.j 5274-6031 (blues_patrol, UH_Patrol_Copy circuit, heal_self,
 --   Heal_Nearby_Hero, Town_Attacked, Basic_AI_Go_Heal).
@@ -83,18 +83,18 @@ function RegisterCompanionAI()
     TriggerAddCondition(hn, Condition(function()
         local u = GetAttackedUnitBJ()
         local owner = GetOwningPlayer(u)
-        if not (P2Hero and IsUnitType(u, UNIT_TYPE_HERO)) then return false end
+        if not (Heroes[2] and IsUnitType(u, UNIT_TYPE_HERO)) then return false end
         if owner == P1 or owner == Player(8) or owner == Player(9) or owner == Player(11) then
             return false
         end
         if lifePct(u) > 80.0 then return false end
-        local dx, dy = GetUnitX(u) - GetUnitX(P2Hero), GetUnitY(u) - GetUnitY(P2Hero)
+        local dx, dy = GetUnitX(u) - GetUnitX(Heroes[2]), GetUnitY(u) - GetUnitY(Heroes[2])
         return (dx * dx + dy * dy) <= 700.0 * 700.0
     end))
     TriggerAddAction(hn, function()
         DisableTrigger(hn)
         local target = GetAttackedUnitBJ()
-        IssueTargetOrderBJ(P2Hero, "healingwave", target)
+        IssueTargetOrderBJ(Heroes[2], "healingwave", target)
         AdjustPlayerStateBJ(25, P1, PLAYER_STATE_RESOURCE_GOLD)
         TriggerSleepAction(30.0)
         EnableTrigger(hn)
@@ -104,12 +104,12 @@ function RegisterCompanionAI()
     local ta = CreateTrigger()
     TriggerRegisterPlayerUnitEventSimple(ta, Player(8), EVENT_PLAYER_UNIT_ATTACKED)
     TriggerAddCondition(ta, Condition(function()
-        return P2Hero ~= nil and not DefendingSilmeria
+        return Heroes[2] ~= nil and not DefendingSilmeria
     end))
     TriggerAddAction(ta, function()
         DisableTrigger(ta)
         local loc = GetUnitLoc(GetAttacker())
-        IssuePointOrderLoc(P2Hero, "patrol", loc)
+        IssuePointOrderLoc(Heroes[2], "patrol", loc)
         RemoveLocation(loc)
         AdjustPlayerStateBJ(25, P1, PLAYER_STATE_RESOURCE_GOLD)
         TriggerSleepAction(45.0)
@@ -121,7 +121,7 @@ function RegisterCompanionAI()
     TriggerRegisterAnyUnitEventBJ(gh, EVENT_PLAYER_UNIT_ATTACKED)
     TriggerAddCondition(gh, Condition(function()
         return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('H04Y')
-            and P2Hero ~= nil and lifePct(P2Hero) <= 20.0
+            and Heroes[2] ~= nil and lifePct(Heroes[2]) <= 20.0
     end))
     TriggerAddAction(gh, function()
         orderCompanion("move", rct.FrontOfFountain)

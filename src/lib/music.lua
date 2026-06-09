@@ -31,49 +31,35 @@ function StartMusicLoop(fn)
     ConditionalTriggerExecute(t)
 end
 
--- Intro (pre-game selection) — war3map.j 18472-18476, plus an ambient kill so the
--- stock music does not play under it (the original's bug the player reported).
-function IntroMusicLoop()
-    if not IntroMusicOn then return end
-    StopMusicBJ(false)
-    PlaySoundBJ(snd.IntroMusic)
-    TriggerSleepAction(156.0)
-    StopSoundBJ(snd.IntroMusic, true)
-    return IntroMusicLoop()
+-- All four music threads share one shape: while a flag holds, (re)play a track for its
+-- duration, then loop. They differ only in guard, sound, duration, and post-stop gap.
+-- The sound is resolved by key at call time (snd.* is populated by InitSounds, post-load).
+local function makeMusicLoop(guardFn, soundKey, duration, tailGap)
+    local function loop()
+        if not guardFn() then return end
+        StopMusicBJ(false)
+        PlaySoundBJ(snd[soundKey])
+        TriggerSleepAction(duration)
+        StopSoundBJ(snd[soundKey], true)
+        if tailGap then TriggerSleepAction(tailGap) end
+        return loop()
+    end
+    return loop
 end
 
--- Standard boss fight — war3map.j 6050-6056. Blocked while Near Defeat is active.
-function BossMusicLoop()
-    if not (BossMusic and not NearDefeatMusic) then return end
-    StopMusicBJ(false)
-    PlaySoundBJ(snd.BossMusic1)
-    TriggerSleepAction(270.0)
-    StopSoundBJ(snd.BossMusic1, true)
-    TriggerSleepAction(1.0)
-    return BossMusicLoop()
-end
-
--- Chapter / tough boss — war3map.j 6079-6085.
-function ToughBossMusicLoop()
-    if not (ToughBossMusic and not NearDefeatMusic) then return end
-    StopMusicBJ(false)
-    PlaySoundBJ(snd.ChapterBoss)
-    TriggerSleepAction(310.0)
-    StopSoundBJ(snd.ChapterBoss, true)
-    TriggerSleepAction(4.0)
-    return ToughBossMusicLoop()
-end
-
--- Near defeat (highest priority — last hero alive) — war3map.j 6105-6111.
-function NearDefeatMusicLoop()
-    if not NearDefeatMusic then return end
-    StopMusicBJ(false)
-    PlaySoundBJ(snd.NearDefeatMusic)
-    TriggerSleepAction(290.0)
-    StopSoundBJ(snd.NearDefeatMusic, true)
-    TriggerSleepAction(3.0)
-    return NearDefeatMusicLoop()
-end
+-- Intro (pre-game selection, war3map.j 18472-18476). Ambient is killed each loop so the
+-- stock playlist can't bleed under it.
+IntroMusicLoop      = makeMusicLoop(function() return IntroMusicOn end,
+                                    'IntroMusic', 156.0)
+-- Standard boss fight (war3map.j 6050-6056) — yields while Near Defeat is active.
+BossMusicLoop       = makeMusicLoop(function() return BossMusic and not NearDefeatMusic end,
+                                    'BossMusic1', 270.0, 1.0)
+-- Chapter / tough boss (war3map.j 6079-6085).
+ToughBossMusicLoop  = makeMusicLoop(function() return ToughBossMusic and not NearDefeatMusic end,
+                                    'ChapterBoss', 310.0, 4.0)
+-- Near defeat — highest priority, last hero alive (war3map.j 6105-6111).
+NearDefeatMusicLoop = makeMusicLoop(function() return NearDefeatMusic end,
+                                    'NearDefeatMusic', 290.0, 3.0)
 
 -- ─── Wave (gameplay) music ────────────────────────────────────────────────────
 -- The original ran the WC3 stock playlist via SetMapMusic("Music",...) during normal

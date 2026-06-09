@@ -17,14 +17,30 @@ local function laneRect(key)
     return rct[SPAWN_ALIAS[key] or key]
 end
 
+-- A "boss reacts when attacked" trigger for Player(9) units: when a `unitType` unit is
+-- attacked and `pred(u)` holds, run `act(u, attacker)`. Keeps the register/condition
+-- boilerplate in one place. (Level AIs that need a generation guard or mute themselves
+-- across a TriggerSleepAction stay written out explicitly — see setupLevel26/28/29.)
+local function onAttackedTypeAI(unitType, pred, act)
+    local trg = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(trg, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(trg, Condition(function()
+        local u = GetAttackedUnitBJ()
+        return GetUnitTypeId(u) == FourCC(unitType) and pred(u)
+    end))
+    TriggerAddAction(trg, function()
+        act(GetAttackedUnitBJ(), GetAttacker())
+    end)
+    return trg
+end
+
 -- ─── Shared per-level infrastructure (war3map.j 19035-19120, 7436-7449, 6414-6422) ──
 
 function ThingsToDoBeforeEveryLevelBegins()
     local function revive(hero)
         if hero then ReviveHeroLoc(hero, GetRectCenter(rct.StartingPlayerArea), true) end
     end
-    revive(P1Hero); revive(P2Hero); revive(P3Hero); revive(P4Hero)
-    revive(P5Hero); revive(P6Hero); revive(P7Hero); revive(P8Hero)
+    for i = 1, 8 do revive(Heroes[i]) end
     revive(WildbondPet)
     -- SpawnMeleeGuards()/SpawnArcherGuards() — guard-post system, port later
     DieHardActivated = false
@@ -74,6 +90,52 @@ function BonusReset()
 end
 
 -- ─── Bonuses & Upkeep (war3map.j 6431-7317, Upkeep_2 7319-7414) ──────────────
+
+-- Per-class achievement payouts (war3map.j 6991-7308). Each row: the detection flag
+-- (set in achievements.lua), the player-handle global, the gold, the message printed
+-- after the player's name, and an optional `after` post-hook. BonusesAndUpkeep loops
+-- this, paying + resetting any latched flag. Adding a class = adding one row.
+local CLASS_PAYOUTS = {
+    { flag='ClericofOrderBonusA',    player='ClericofOrderPlayer',  gold=200,  msg=" - |cffff0000- Dedicated Healer! - |cffffcc00+200 Gold|r - (Healed an ally that was about to die.)" },
+    { flag='ClericofOrderBonusB',    player='ClericofOrderPlayer',  gold=100,  msg=" - |cffff0000- Symbol of Hope! - |cffffcc00+100 Gold|r - (Protected an ally in grave danger.)" },
+    { flag='ClericOTSFBonusA',       player='ClericOTSFPlayer',     gold=75,   msg=" - |cffff0000- Chaplain! - |cffffcc00+75 Gold|r - (Frequent use of heals on allies.)" },
+    { flag='ClericOTSFBonusB',       player='ClericOTSFPlayer',     gold=75,   msg=" - |cffff0000- Slingshot Pro! - |cffffcc00+75 Gold|r - (Frequent Flurry of Slingstones.)" },
+    { flag='EarthenTemplarBonusA',   player='EarthenTemplarPlayer', gold=150,  msg=" - |cffff0000- Rage of the Earth! - |cffffcc00+150 Gold|r - (6+ earth elementals.)" },
+    { flag='EarthenTemplarBonusB',   player='EarthenTemplarPlayer', gold=100,  msg=" - |cffff0000- Supreme Smasher! - |cffffcc00+100 Gold|r - (100+ units killed.)" },
+    { flag='DwarvenAxeMasterBonusA', player='DwarvenAMPlayer',      gold=200,  msg=" - |cffff0000- Slice and Dice! - |cffffcc00+200 Gold|r - (Living Axe killed 30+ units.)" },
+    { flag='DwarvenAxeMasterBonusB', player='DwarvenAMPlayer',      gold=25,   msg=" - |cffff0000- Naturally Aggressive! - |cffffcc00+25 Gold|r - (4 Ranks of Aggression.)" },
+    { flag='MonkEFBonusA',           player='MonkEFPlayer',         gold=100,  msg=" - |cffff0000- One with Chakra! - |cffffcc00+100 Gold|r - (Chakra Burst healed 5+ heroes.)" },
+    { flag='MonkEFBonusB',           player='MonkEFPlayer',         gold=150,  msg=" - |cffff0000- Blistering Speed! - |cffffcc00+150 Gold|r - (Frequent use of Blazing Speed.)" },
+    { flag='ManAtArmsBonusA',        player='HiredWagesPlayer',     gold=150,  msg=" - |cffff0000- Pay Raise! - |cffffcc00+150 Gold|r - (4 Ranks of Hired Wages.)" },
+    { flag='ManAtArmsBonusB',        player='ManAtArmsPlayer',      gold=100,  msg=" - |cffff0000- Hoarse Throat! - |cffffcc00+100 Gold|r - (Frequent Battle Shout.)" },
+    { flag='MasterOTABonusA',        player='MasterOfTheArtPlayer', gold=100,  msg=" - |cffff0000- Bombardier! - |cffffcc00+100 Gold|r - (Blast cast 50+ times.)" },
+    { flag='MasterOTABonusB',        player='MasterOfTheArtPlayer', gold=100,  msg=" - |cffff0000- Wielder of the Art! - |cffffcc00+100 Gold|r - (Essence Shock 50+ times.)" },
+    { flag='FeralArchonBonus',       player='FeralArchonPlayer',    gold=100,  msg=" - |cffff0000- Beast Within! - |cffffcc00+100 Gold|r - (Tantrum slew multiple enemies.)" },
+    { flag='FeralArchonBonusB',      player='FeralArchonPlayer',    gold=125,  msg=" - |cffff0000- Predator! - |cffffcc00+125 Gold|r - (Got the killing blow on a boss.)" },
+    { flag='HumanEngineerBonusA',    player='HumanEngineerPlayer',  gold=150,  msg=" - |cffff0000- Master Crafter! - |cffffcc00+150 Gold|r - (Built 10+ structures.)" },
+    { flag='HumanEngineerBonusB',    player='HumanEngineerPlayer',  gold=200,  msg=" - |cffff0000- Violent Engineer! - |cffffcc00+200 Gold|r - (Killed 50+ units as engineer.)" },
+    { flag='SunSoulBonusA',          player='SunSoulPlayer',        gold=100,  msg=" - |cffff0000- Solar Guard! - |cffffcc00+100 Gold|r - (Frequent Solar Barrier.)" },
+    { flag='SunSoulBonusB',          player='SunSoulPlayer',        gold=100,  msg=" - |cffff0000- Lightcaster! - |cffffcc00+100 Gold|r - (Frequent sunbeam.)" },
+    { flag='SunSoulPenalty',         player='SunSoulPlayer',        gold=-400, msg=" - |cffff0000- Incinerated an Ally... - |cffffcc00-400 Gold|r - (Killed an ally with sunbeam.)" },
+    { flag='PaladinJusticeBonusA',   player='PaladinJusticePlayer', gold=175,  msg=" - |cffff0000- Shining Beacon! - |cffffcc00+175 Gold|r - (Saved an ally from death.)" },
+    { flag='PaladinJusticeBonusB',   player='PaladinJusticePlayer', gold=100,  msg=" - |cffff0000- Crusader! - |cffffcc00+100 Gold|r - (100+ units killed.)" },
+    { flag='DwarvenRFBonusA',        player='DwarvenRFPlayer',      gold=25,   msg=" - |cffff0000- Titan's Stamina! - |cffffcc00+25 Gold|r - (4 Ranks of Dwarven Stamina.)" },
+    { flag='DwarvenRFBonusB',        player='DwarvenRFPlayer',      gold=125,  msg=" - |cffff0000- Fearful Presence! - |cffffcc00+125 Gold|r - (Caused 15+ units to flee.)" },
+    { flag='DiscipleBonusA',         player='DisciplePlayer',       gold=75,   msg=" - |cffff0000- Aura of Grace! - |cffffcc00+75 Gold|r - (Frequent Mass Restore.)" },
+    { flag='DiscipleBonusB',         player='DisciplePlayer',       gold=200,  msg=" - |cffff0000- Cheat Death! - |cffffcc00+200 Gold|r - (Rescued an ally with Death Ward.)", after=function() GraceBonusObtained = true end },
+    { flag='ArcaneArcherBonusA',     player='ArcaneArcherPlayer',   gold=50,   msg=" - |cffff0000- Power Shot! - |cffffcc00+50 Gold|r - (4 Ranks of Far Shot.)" },
+    { flag='ArcaneArcherBonusB',     player='ArcaneArcherPlayer',   gold=100,  msg=" - |cffff0000- Sniper! - |cffffcc00+100 Gold|r - (Frequent Eagle Arrow.)" },
+    { flag='AxeBrotherBonusA',       player='AxeBrotherPlayer',     gold=100,  msg=" - |cffff0000- Whirling Dervish! - |cffffcc00+100 Gold|r - (Frequent Whirlwind Attack.)" },
+    { flag='AxeBrotherBonusB',       player='AxeBrotherPlayer',     gold=100,  msg=" - |cffff0000- Savage Fighter! - |cffffcc00+100 Gold|r - (50+ Decimate kills.)" },
+    { flag='CentaurDruidBonusA',     player='CentaurDruidPlayer',   gold=100,  msg=" - |cffff0000- Cultivator! - |cffffcc00+100 Gold|r - (5+ treants created.)" },
+    { flag='CentaurDruidBonusB',     player='CentaurDruidPlayer',   gold=100,  msg=" - |cffff0000- Nature's Wrath! - |cffffcc00+100 Gold|r - (Treants killed 50+ units.)" },
+    { flag='ClericElvenWordBonusA',  player='ClericEWPlayer',       gold=150,  msg=" - |cffff0000- Mender! - |cffffcc00+150 Gold|r - (Frequent Regrowth healing.)" },
+    { flag='ClericElvenWordBonusB',  player='ClericEWPlayer',       gold=100,  msg=" - |cffff0000- Mistress of Elven Heart! - |cffffcc00+100 Gold|r - (Absorbed a spell.)" },
+    { flag='CrestedDrakeBonusA',     player='CrestedDrakePlayer',   gold=100,  msg=" - |cffff0000- Firebreather! - |cffffcc00+100 Gold|r - (Frequent Flame Wreath.)" },
+    { flag='CrestedDrakeBonusB',     player='CrestedDrakePlayer',   gold=50,   msg=" - |cffff0000- Fangterror! - |cffffcc00+50 Gold|r - (4 Ranks of Drakefang.)" },
+    { flag='HEBardBonusA',           player='BardPlayer',           gold=100,  msg=" - |cffff0000- Harmonic Healing! - |cffffcc00+100 Gold|r - (Frequent Melody of Mending.)" },
+    { flag='HEBardBonusB',           player='BardPlayer',           gold=150,  msg=" - |cffff0000- Sower of Chaos! - |cffffcc00+150 Gold|r - (50+ units confused.)" },
+}
 
 function BonusesAndUpkeep(levelIndex)
     -- Helper: award gold + message to ALL human players.
@@ -157,52 +219,16 @@ function BonusesAndUpkeep(levelIndex)
     end
 
     -- ── Per-class achievement bonuses (war3map.j 6991-7308) ───────────────────
-    -- Pattern: if <Flag> then awardOne(gold, <ClassPlayer>, <msg>); <Flag>=false
-    local function classBonus(flag, player, gold, msg)
-        if not flag then return end
-        awardOne(gold, player, msg)
-        return false  -- caller must assign the result back
+    -- Data-driven from CLASS_PAYOUTS (above): flags/players are set by achievements.lua;
+    -- here we pay out, announce, reset the flag, and run any post-hook.
+    for _, b in ipairs(CLASS_PAYOUTS) do
+        if _G[b.flag] then
+            local p = _G[b.player]
+            awardOne(b.gold, p, GetPlayerName(p) .. b.msg)
+            _G[b.flag] = false
+            if b.after then b.after() end
+        end
     end
-    -- Use inline assignments since Lua closures capture upvalues:
-    if ClericofOrderBonusA  then awardOne(200, ClericofOrderPlayer,  GetPlayerName(ClericofOrderPlayer)  .. " - |cffff0000- Dedicated Healer! - |cffffcc00+200 Gold|r - (Healed an ally that was about to die.)");      ClericofOrderBonusA  = false end
-    if ClericofOrderBonusB  then awardOne(100, ClericofOrderPlayer,  GetPlayerName(ClericofOrderPlayer)  .. " - |cffff0000- Symbol of Hope! - |cffffcc00+100 Gold|r - (Protected an ally in grave danger.)");           ClericofOrderBonusB  = false end
-    if ClericOTSFBonusA     then awardOne(75,  ClericOTSFPlayer,     GetPlayerName(ClericOTSFPlayer)     .. " - |cffff0000- Chaplain! - |cffffcc00+75 Gold|r - (Frequent use of heals on allies.)");                   ClericOTSFBonusA     = false end
-    if ClericOTSFBonusB     then awardOne(75,  ClericOTSFPlayer,     GetPlayerName(ClericOTSFPlayer)     .. " - |cffff0000- Slingshot Pro! - |cffffcc00+75 Gold|r - (Frequent Flurry of Slingstones.)");               ClericOTSFBonusB     = false end
-    if EarthenTemplarBonusA then awardOne(150, EarthenTemplarPlayer, GetPlayerName(EarthenTemplarPlayer) .. " - |cffff0000- Rage of the Earth! - |cffffcc00+150 Gold|r - (6+ earth elementals.)");                     EarthenTemplarBonusA = false end
-    if EarthenTemplarBonusB then awardOne(100, EarthenTemplarPlayer, GetPlayerName(EarthenTemplarPlayer) .. " - |cffff0000- Supreme Smasher! - |cffffcc00+100 Gold|r - (100+ units killed.)");                         EarthenTemplarBonusB = false end
-    if DwarvenAxeMasterBonusA then awardOne(200, DwarvenAMPlayer,   GetPlayerName(DwarvenAMPlayer)   .. " - |cffff0000- Slice and Dice! - |cffffcc00+200 Gold|r - (Living Axe killed 30+ units.)");                    DwarvenAxeMasterBonusA = false end
-    if DwarvenAxeMasterBonusB then awardOne(25,  DwarvenAMPlayer,   GetPlayerName(DwarvenAMPlayer)   .. " - |cffff0000- Naturally Aggressive! - |cffffcc00+25 Gold|r - (4 Ranks of Aggression.)");                     DwarvenAxeMasterBonusB = false end
-    if MonkEFBonusA         then awardOne(100, MonkEFPlayer,         GetPlayerName(MonkEFPlayer)         .. " - |cffff0000- One with Chakra! - |cffffcc00+100 Gold|r - (Chakra Burst healed 5+ heroes.)");             MonkEFBonusA         = false end
-    if MonkEFBonusB         then awardOne(150, MonkEFPlayer,         GetPlayerName(MonkEFPlayer)         .. " - |cffff0000- Blistering Speed! - |cffffcc00+150 Gold|r - (Frequent use of Blazing Speed.)");            MonkEFBonusB         = false end
-    if ManAtArmsBonusA      then awardOne(150, HiredWagesPlayer,     GetPlayerName(HiredWagesPlayer)     .. " - |cffff0000- Pay Raise! - |cffffcc00+150 Gold|r - (4 Ranks of Hired Wages.)");                          ManAtArmsBonusA      = false end
-    if ManAtArmsBonusB      then awardOne(100, ManAtArmsPlayer,      GetPlayerName(ManAtArmsPlayer)      .. " - |cffff0000- Hoarse Throat! - |cffffcc00+100 Gold|r - (Frequent Battle Shout.)");                       ManAtArmsBonusB      = false end
-    if MasterOTABonusA      then awardOne(100, MasterOfTheArtPlayer, GetPlayerName(MasterOfTheArtPlayer) .. " - |cffff0000- Bombardier! - |cffffcc00+100 Gold|r - (Blast cast 50+ times.)");                           MasterOTABonusA      = false end
-    if MasterOTABonusB      then awardOne(100, MasterOfTheArtPlayer, GetPlayerName(MasterOfTheArtPlayer) .. " - |cffff0000- Wielder of the Art! - |cffffcc00+100 Gold|r - (Essence Shock 50+ times.)");                MasterOTABonusB      = false end
-    if FeralArchonBonus     then awardOne(100, FeralArchonPlayer,     GetPlayerName(FeralArchonPlayer)     .. " - |cffff0000- Beast Within! - |cffffcc00+100 Gold|r - (Tantrum slew multiple enemies.)");               FeralArchonBonus     = false end
-    if FeralArchonBonusB    then awardOne(125, FeralArchonPlayer,     GetPlayerName(FeralArchonPlayer)     .. " - |cffff0000- Predator! - |cffffcc00+125 Gold|r - (Got the killing blow on a boss.)");                  FeralArchonBonusB    = false end
-    if HumanEngineerBonusA  then awardOne(150, HumanEngineerPlayer,  GetPlayerName(HumanEngineerPlayer)  .. " - |cffff0000- Master Crafter! - |cffffcc00+150 Gold|r - (Built 10+ structures.)");                       HumanEngineerBonusA  = false end
-    if HumanEngineerBonusB  then awardOne(200, HumanEngineerPlayer,  GetPlayerName(HumanEngineerPlayer)  .. " - |cffff0000- Violent Engineer! - |cffffcc00+200 Gold|r - (Killed 50+ units as engineer.)");             HumanEngineerBonusB  = false end
-    if SunSoulBonusA        then awardOne(100, SunSoulPlayer,        GetPlayerName(SunSoulPlayer)        .. " - |cffff0000- Solar Guard! - |cffffcc00+100 Gold|r - (Frequent Solar Barrier.)");                        SunSoulBonusA        = false end
-    if SunSoulBonusB        then awardOne(100, SunSoulPlayer,        GetPlayerName(SunSoulPlayer)        .. " - |cffff0000- Lightcaster! - |cffffcc00+100 Gold|r - (Frequent sunbeam.)");                              SunSoulBonusB        = false end
-    if SunSoulPenalty       then awardOne(-400, SunSoulPlayer,       GetPlayerName(SunSoulPlayer)        .. " - |cffff0000- Incinerated an Ally... - |cffffcc00-400 Gold|r - (Killed an ally with sunbeam.)");          SunSoulPenalty       = false end
-    if PaladinJusticeBonusA then awardOne(175, PaladinJusticePlayer, GetPlayerName(PaladinJusticePlayer) .. " - |cffff0000- Shining Beacon! - |cffffcc00+175 Gold|r - (Saved an ally from death.)");                   PaladinJusticeBonusA = false end
-    if PaladinJusticeBonusB then awardOne(100, PaladinJusticePlayer, GetPlayerName(PaladinJusticePlayer) .. " - |cffff0000- Crusader! - |cffffcc00+100 Gold|r - (100+ units killed.)");                                PaladinJusticeBonusB = false end
-    if DwarvenRFBonusA      then awardOne(25,  DwarvenRFPlayer,      GetPlayerName(DwarvenRFPlayer)      .. " - |cffff0000- Titan's Stamina! - |cffffcc00+25 Gold|r - (4 Ranks of Dwarven Stamina.)");                 DwarvenRFBonusA      = false end
-    if DwarvenRFBonusB      then awardOne(125, DwarvenRFPlayer,      GetPlayerName(DwarvenRFPlayer)      .. " - |cffff0000- Fearful Presence! - |cffffcc00+125 Gold|r - (Caused 15+ units to flee.)");                 DwarvenRFBonusB      = false end
-    if DiscipleBonusA       then awardOne(75,  DisciplePlayer,       GetPlayerName(DisciplePlayer)       .. " - |cffff0000- Aura of Grace! - |cffffcc00+75 Gold|r - (Frequent Mass Restore.)");                        DiscipleBonusA       = false end
-    if DiscipleBonusB       then awardOne(200, DisciplePlayer,       GetPlayerName(DisciplePlayer)       .. " - |cffff0000- Cheat Death! - |cffffcc00+200 Gold|r - (Rescued an ally with Death Ward.)"); GraceBonusObtained = true; DiscipleBonusB = false end
-    if ArcaneArcherBonusA   then awardOne(50,  ArcaneArcherPlayer,   GetPlayerName(ArcaneArcherPlayer)   .. " - |cffff0000- Power Shot! - |cffffcc00+50 Gold|r - (4 Ranks of Far Shot.)");                             ArcaneArcherBonusA   = false end
-    if ArcaneArcherBonusB   then awardOne(100, ArcaneArcherPlayer,   GetPlayerName(ArcaneArcherPlayer)   .. " - |cffff0000- Sniper! - |cffffcc00+100 Gold|r - (Frequent Eagle Arrow.)");                               ArcaneArcherBonusB   = false end
-    if AxeBrotherBonusA     then awardOne(100, AxeBrotherPlayer,     GetPlayerName(AxeBrotherPlayer)     .. " - |cffff0000- Whirling Dervish! - |cffffcc00+100 Gold|r - (Frequent Whirlwind Attack.)");                AxeBrotherBonusA     = false end
-    if AxeBrotherBonusB     then awardOne(100, AxeBrotherPlayer,     GetPlayerName(AxeBrotherPlayer)     .. " - |cffff0000- Savage Fighter! - |cffffcc00+100 Gold|r - (50+ Decimate kills.)");                         AxeBrotherBonusB     = false end
-    if CentaurDruidBonusA   then awardOne(100, CentaurDruidPlayer,   GetPlayerName(CentaurDruidPlayer)   .. " - |cffff0000- Cultivator! - |cffffcc00+100 Gold|r - (5+ treants created.)");                             CentaurDruidBonusA   = false end
-    if CentaurDruidBonusB   then awardOne(100, CentaurDruidPlayer,   GetPlayerName(CentaurDruidPlayer)   .. " - |cffff0000- Nature's Wrath! - |cffffcc00+100 Gold|r - (Treants killed 50+ units.)");                   CentaurDruidBonusB   = false end
-    if ClericElvenWordBonusA then awardOne(150, ClericEWPlayer,      GetPlayerName(ClericEWPlayer)       .. " - |cffff0000- Mender! - |cffffcc00+150 Gold|r - (Frequent Regrowth healing.)");                          ClericElvenWordBonusA = false end
-    if ClericElvenWordBonusB then awardOne(100, ClericEWPlayer,      GetPlayerName(ClericEWPlayer)       .. " - |cffff0000- Mistress of Elven Heart! - |cffffcc00+100 Gold|r - (Absorbed a spell.)");                  ClericElvenWordBonusB = false end
-    if CrestedDrakeBonusA   then awardOne(100, CrestedDrakePlayer,   GetPlayerName(CrestedDrakePlayer)   .. " - |cffff0000- Firebreather! - |cffffcc00+100 Gold|r - (Frequent Flame Wreath.)");                         CrestedDrakeBonusA   = false end
-    if CrestedDrakeBonusB   then awardOne(50,  CrestedDrakePlayer,   GetPlayerName(CrestedDrakePlayer)   .. " - |cffff0000- Fangterror! - |cffffcc00+50 Gold|r - (4 Ranks of Drakefang.)");                            CrestedDrakeBonusB   = false end
-    if HEBardBonusA         then awardOne(100, BardPlayer,           GetPlayerName(BardPlayer)           .. " - |cffff0000- Harmonic Healing! - |cffffcc00+100 Gold|r - (Frequent Melody of Mending.)");              HEBardBonusA         = false end
-    if HEBardBonusB         then awardOne(150, BardPlayer,           GetPlayerName(BardPlayer)           .. " - |cffff0000- Sower of Chaos! - |cffffcc00+150 Gold|r - (50+ units confused.)");                        HEBardBonusB         = false end
 
     -- ── Upkeep_2 equivalents (war3map.j 7369-7408) ────────────────────────────
     -- Reckless Pyromancer penalty (MajinPenalty, war3map.j 7370-7376)
@@ -260,45 +286,25 @@ local function setupLevel6Boss()
     end)
     DestroyGroup(grp)
 
-    -- heal self when attacked below 125 HP
-    local aiHeal = CreateTrigger()
-    TriggerRegisterPlayerUnitEventSimple(aiHeal, P9, EVENT_PLAYER_UNIT_ATTACKED)
-    TriggerAddCondition(aiHeal, Condition(function()
-        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('H00C')
-            and GetUnitState(GetAttackedUnitBJ(), UNIT_STATE_LIFE) <= 125.0
-    end))
-    TriggerAddAction(aiHeal, function()
-        local b = GetAttackedUnitBJ()
-        IssueTargetOrderBJ(b, "healingwave", b)
-    end)
-
-    -- divine shield when boss below 500 HP
-    local aiShield = CreateTrigger()
-    TriggerRegisterPlayerUnitEventSimple(aiShield, P9, EVENT_PLAYER_UNIT_ATTACKED)
-    TriggerAddCondition(aiShield, Condition(function()
-        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('H00C')
-            and GetUnitState(GetAttackedUnitBJ(), UNIT_STATE_LIFE) <= 500.0
-    end))
-    TriggerAddAction(aiShield, function()
-        IssueImmediateOrderBJ(GetAttackedUnitBJ(), "divineshield")
-    end)
+    -- heal self when attacked below 125 HP; divine shield when below 500 HP
+    onAttackedTypeAI('H00C',
+        function(u) return GetUnitState(u, UNIT_STATE_LIFE) <= 125.0 end,
+        function(b) IssueTargetOrderBJ(b, "healingwave", b) end)
+    onAttackedTypeAI('H00C',
+        function(u) return GetUnitState(u, UNIT_STATE_LIFE) <= 500.0 end,
+        function(b) IssueImmediateOrderBJ(b, "divineshield") end)
 end
 
 -- Level 8 enemy AI: h00Y casts firebolt at its attacker when ≤125 HP, then retreats
 -- to the fortress entrance (war3map.j 20113-20127).
 local function setupLevel8AI()
-    local trg = CreateTrigger()
-    TriggerRegisterPlayerUnitEventSimple(trg, P9, EVENT_PLAYER_UNIT_ATTACKED)
-    TriggerAddCondition(trg, Condition(function()
-        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('h00Y')
-            and GetUnitState(GetAttackedUnitBJ(), UNIT_STATE_LIFE) <= 125.0
-    end))
-    TriggerAddAction(trg, function()
-        local u = GetAttackedUnitBJ()
-        IssueTargetOrderBJ(u, "firebolt", GetAttacker())
-        TriggerSleepAction(2.0)
-        IssuePointOrderLoc(u, "patrol", GetRectCenter(rct.EntranceToFortress))
-    end)
+    onAttackedTypeAI('h00Y',
+        function(u) return GetUnitState(u, UNIT_STATE_LIFE) <= 125.0 end,
+        function(u, attacker)
+            IssueTargetOrderBJ(u, "firebolt", attacker)
+            TriggerSleepAction(2.0)
+            IssuePointOrderLoc(u, "patrol", GetRectCenter(rct.EntranceToFortress))
+        end)
 end
 
 -- Level 10 boss: Goblin King O001 (war3map.j 20290-20360).

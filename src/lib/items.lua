@@ -297,7 +297,8 @@ function RegisterSupplyStockingTriggers()
     TriggerAddAction(retrieveT, function()
         local caster = GetSpellAbilityUnit()
         local owner  = GetOwningPlayer(caster)
-        local heroes = { P1Hero, P2Hero, P3Hero, P4Hero, P5Hero, P6Hero, P7Hero, P8Hero }
+        local heroes = { Heroes[1], Heroes[2], Heroes[3], Heroes[4],
+                         Heroes[5], Heroes[6], Heroes[7], Heroes[8] }
         for _, hero in ipairs(heroes) do
             if hero and GetOwningPlayer(hero) == owner then
                 local cx = GetUnitX(hero)

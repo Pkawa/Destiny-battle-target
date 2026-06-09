@@ -24,8 +24,10 @@ StartingPotions     = false
 -- Hero state
 TotalHeroes         = 32
 HeroSelected        = 0
-P1Hero = nil; P2Hero = nil; P3Hero = nil; P4Hero = nil
-P5Hero = nil; P6Hero = nil; P7Hero = nil; P8Hero = nil
+-- Per-player chosen hero, 1-indexed: Heroes[n] belongs to player index (n-1).
+-- (Heroes[2] is the blue companion "Sir Joshua" in story/battle/solo modes —
+-- the original's udg_P2Hero.)
+Heroes = {}
 CurrentIntroLocInt  = 0
 
 HeroTaken       = {}
@@ -137,12 +139,9 @@ Only1Paladin    = true
 Only1Solar      = true
 
 -- Player kill/score tracking
-P1Kills = 0; P2Kills = 0; P3Kills = 0; P4Kills = 0
-P5Kills = 0; P6Kills = 0; P7Kills = 0; P8Kills = 0
-P1Score = 0; P2Score = 0; P3Score = 0; P4Score = 0
-P5Score = 0; P6Score = 0; P7Score = 0; P8Score = 0
-P1MoveCount = 0; P2MoveCount = 0; P3MoveCount = 0; P4MoveCount = 0
-P5MoveCount = 0; P6MoveCount = 0; P7MoveCount = 0; P8MoveCount = 0
+-- Per-player score tracking, 1-indexed (kill scoring system not yet ported).
+Kills = {}; Score = {}; MoveCount = {}
+for i = 1, 8 do Kills[i] = 0; Score[i] = 0; MoveCount[i] = 0 end
 MostKills       = 0
 TotalBonusGold  = 0
 HighestLevel    = 0
@@ -212,18 +211,16 @@ function InitGameGlobals()
     NextLevelTimerWindow = nil
 end
 
--- Companion arrays
-P1Companion = {}; P2Companion = {}; P3Companion = {}; P4Companion = {}
-P5Companion = {}; P6Companion = {}; P7Companion = {}; P8Companion = {}
-for i = 0, 10 do
-    P1Companion[i] = 0; P2Companion[i] = 0; P3Companion[i] = 0; P4Companion[i] = 0
-    P5Companion[i] = 0; P6Companion[i] = 0; P7Companion[i] = 0; P8Companion[i] = 0
+-- Companion slot arrays, 1-indexed: Companion[player][slot] (player 1-8, slot 0-10).
+Companion = {}
+for p = 1, 8 do
+    Companion[p] = {}
+    for i = 0, 10 do Companion[p][i] = 0 end
 end
 
--- Companion relationship levels
-P1RelationLevel = 1
-P2RelationLevel = 1
-P3RelationLeve  = 1  -- note: typo preserved from original
+-- Companion relationship level, 1-indexed (per player).
+RelationLevel = {}
+for i = 1, 8 do RelationLevel[i] = 1 end
 
 -- Scroll / circle arrays (populated at T+16s)
 Circle0Scrolls = {}; Circle1Scrolls = {}; Circle2Scrolls = {}
