@@ -11,6 +11,8 @@
 
 local P9 = Player(9)
 local O003, O006, TENTACLE = FourCC('O003'), FourCC('O006'), FourCC('h02M')
+local ACID_ORB, ACID_SPRAY = FourCC('e00T'), FourCC('e00U')   -- roaming orb / spray missile
+local FLAMESTRIKE = FourCC('A09D')                            -- Acid Surge cast ability
 
 local CORNERS = { 'Megaboss1NWCorner', 'Megaboss1SECorner', 'Megaboss1SWCorner', 'Megaboss1NECorner' }
 local TENTACLE_SPAWNS = {
@@ -42,6 +44,17 @@ local function arenaTarget(heroOnly)
     local u = GroupPickRandomUnit(g)
     DestroyGroup(g)
     return u
+end
+
+-- Order `u` to move `dist` along its current facing (the polar-projection move the acid
+-- units use constantly).
+local function moveForward(u, dist)
+    local a = math.rad(GetUnitFacing(u))
+    IssuePointOrder(u, "move", GetUnitX(u) + dist * math.cos(a), GetUnitY(u) + dist * math.sin(a))
+end
+
+local function bossTag(boss, text)
+    if boss then FloatText(boss, text, 100, 0, 0, 4.0) end
 end
 
 -- The encounter setup + AI. Runs in a trigger-action thread (sleeps allowed).
@@ -102,9 +115,11 @@ function StartMegaboss1()
     if intro then SetUnitInvulnerable(intro, true) end
 
     -- ── arm the encounter triggers (all stopped on victory) ──────────────────────
-    local boundaryT, checkT, tentT, fleshT, pulseT, victoryT
+    local boundaryT, checkT, tentT, fleshT, victoryT
+    local orbBounceT, sprayDespawnT, orbTickT
     local function stopAll()
-        for _, t in ipairs({ boundaryT, checkT, tentT, fleshT, pulseT }) do
+        for _, t in ipairs({ boundaryT, checkT, tentT, fleshT,
+                             orbBounceT, sprayDespawnT, orbTickT }) do
             if t then DisableTrigger(t) end
         end
     end
