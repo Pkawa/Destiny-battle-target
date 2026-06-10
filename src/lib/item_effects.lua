@@ -57,6 +57,15 @@ function fxHeal()
     end
 end
 
+-- Heal the caster itself (for self-use heal items with no spell target).
+function fxHealSelf()
+    return function(caster, _, amount)
+        if not caster then return end
+        SetUnitState(caster, UNIT_STATE_LIFE,
+            GetUnitState(caster, UNIT_STATE_LIFE) + amount)
+    end
+end
+
 -- Spell-damage every enemy within `radius` of the cast point (or the caster, if
 -- `aroundCaster`). Approximate AoE — it hits enemies near the impact, not the template's
 -- exact line/cone, which is fine for an additive bonus on Shockwave / War Stomp nukes.
@@ -128,6 +137,20 @@ do
         fxDamageArea(220, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC))  -- I01F  Shockwave (150 base + 5/lvl)
     registerItemFX(FourCC('A08W'), 0, 5,
         fxDamageArea(250, true,  ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC))  -- I04T  War Stomp (AoE + 5/lvl)
+end
+
+-- Confirmed by item tooltip text (war3map.wts, resolved via dirty/item_tooltips.py) —
+-- these custom-template actives couldn't be classified from object-data field codes alone,
+-- so each is verified against what the item literally says it does. Still ADDITIVE: the
+-- ability keeps its own base damage/heal, the script only adds perLevel × heroLevel.
+do
+    local nuke = fxDamage(ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC)
+    registerItemFX(FourCC('A02D'), 0, 5, nuke)  -- I00S Edge's Gauntlets: chain lightning, 75/bounce (+5/lvl on primary)
+    registerItemFX(FourCC('A0D7'), 0, 5, nuke)  -- I078 Thunder Rod: periodic 50-dmg bolt (+5/lvl)
+    registerItemFX(FourCC('A0D9'), 0, 5, nuke)  -- I079 Rillan Blowdarts: 300 dmg over 15s (+5/lvl burst on cast)
+    registerItemFX(FourCC('A04A'), 0, 5,
+        fxDamageArea(900, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC))  -- I01Q Wand of Infernos: 450 AoE (+5/lvl)
+    registerItemFX(FourCC('A02B'), 0, 5, fxHealSelf())  -- I00Q Ankh of Vitality: heal 50 on use (+5/lvl)
 end
 
 -- To register more: read the item's A0xx ability base in dirty/objects_items.json +
