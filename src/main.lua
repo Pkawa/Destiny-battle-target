@@ -6,6 +6,16 @@ require('lib')  -- loads lib/init.lua which requires all modules
 -- Initialize objects that need InitBlizzard to have run first
 InitGameGlobals()
 
+-- Enemy kills pay gold in EVERY mode. The original sets this in each of its 4 mode-start
+-- paths (war3map.j 16856/17329/18221/18856); our port only covered 2, so some modes paid
+-- no bounty (KNOWN_BUGS §12). Setting it once at startup covers all modes.
+SetPlayerFlagBJ(PLAYER_STATE_GIVES_BOUNTY, true, Player(9))
+
+-- Enemy HEROES (bosses) don't gain XP from nearby player-hero deaths. Deliberate deviation:
+-- the original leaves vanilla hero-XP on for Player(9), so its bosses leveled off player
+-- deaths — reported as a bug in playtesting (KNOWN_BUGS §12).
+SetPlayerHandicapXP(Player(9), 0.0)
+
 -- Create all regions, cameras and sounds
 CreateAllRegions()
 CreateCameras()

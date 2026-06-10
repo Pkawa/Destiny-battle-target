@@ -372,9 +372,28 @@ local LevelData = {
             { u=FourCC('n001'), n=1, dm=1,  at=ABC },
         },
         victory = { type='clearAll', units={ FourCC('h002'), FourCC('n001') } },
+        -- Prisoner rescue payoff (war3map.j Level_4_Victory 19513-19575): surviving h006 with
+        -- ≥3 HP become militia h045 (who join the Vern patrol); the rest are removed.
+        onCleared = function()
+            local g = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h006'))
+            ForGroup(g, function()
+                local u = GetEnumUnit()
+                if GetUnitState(u, UNIT_STATE_LIFE) >= 3.0 then
+                    ReplaceUnitBJ(u, FourCC('h045'), bj_UNIT_STATE_METHOD_MAXIMUM)
+                else
+                    RemoveUnit(u)
+                end
+            end)
+            DestroyGroup(g)
+            local m = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h045'))
+            ForGroup(m, function()
+                IssuePointOrderLoc(GetEnumUnit(), "patrol", GetRectCenter(rct.VernPatrolB))
+            end)
+            DestroyGroup(m)
+        end,
     },
     [5] = {
-        intro = "|cffff8800Level 5|r — Knights (h00B) reinforce the enemy.",
+        intro = "|cffff8800Level 5|r — Knights reinforce the enemy.",
         track = 2, next = 6,
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
@@ -410,7 +429,7 @@ local LevelData = {
         victory = { type='clearAll', units={ FourCC('h00X'), FourCC('h015'), FourCC('h01R') } },
     },
     [8] = {
-        intro = "|cffff8800Level 8|r — Fire-casters (h00Y) among the demons.",
+        intro = "|cffff8800Level 8|r — Fire-casters among the demons.",
         track = 2, next = 9, setup = setupLevel8AI,
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
@@ -424,7 +443,7 @@ local LevelData = {
             FourCC('h00X'), FourCC('h015'), FourCC('h00Y'), FourCC('h01R'), FourCC('h03T') } },
     },
     [9] = {
-        intro = "|cffff8800Level 9|r — A caravan raider (h06O) and brutes (n002) attack.",
+        intro = "|cffff8800Level 9|r — A caravan raider and brutes attack.",
         track = 3, next = 10,
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
@@ -459,7 +478,7 @@ local LevelData = {
         victory = { type='boss', unit=FourCC('O001') },
     },
     [11] = {
-        intro = "|cffff8800Level 11|r — Heavier demons (h014/h00W) and infernals.",
+        intro = "|cffff8800Level 11|r — Heavier demons and infernals.",
         track = 1, next = 12,
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
@@ -472,7 +491,7 @@ local LevelData = {
             FourCC('h014'), FourCC('h00W'), FourCC('h016'), FourCC('h01R') } },
     },
     [12] = {
-        intro = "|cffff8800Level 12|r — The demon horde swells (adds h017).",
+        intro = "|cffff8800Level 12|r — The demon horde swells.",
         track = 2, next = 13,
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
@@ -520,7 +539,7 @@ local LevelData = {
             FourCC('h01E'), FourCC('h01F'), FourCC('h01R'), FourCC('h06Q') } },
     },
     [16] = {
-        intro = "|cffff8800Level 16|r — Warlocks (h01G) slow your heroes.",
+        intro = "|cffff8800Level 16|r — Warlocks slow your heroes.",
         track = 3, next = 17,
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
@@ -535,7 +554,7 @@ local LevelData = {
         setup = setupLevel16AI,
     },
     [17] = {
-        intro = "|cffff8800Level 17|r — Necromancers (h01H) join the undead host.",
+        intro = "|cffff8800Level 17|r — Necromancers join the undead host.",
         track = 1, next = 18,
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
@@ -605,7 +624,7 @@ local LevelData = {
         noAutoPatrol = true,  -- patrol handled inside setup
     },
     [22] = {
-        intro = "|cffff8800Level 22|r — Spectral undead (h01S) and river trolls (n00F) advance.",
+        intro = "|cffff8800Level 22|r — Spectral undead and river trolls advance.",
         track = 2, next = 23,
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
@@ -620,7 +639,7 @@ local LevelData = {
             FourCC('h01R'), FourCC('h01S'), FourCC('n00F'), FourCC('h06Q'), FourCC('h03T') } },
     },
     [23] = {
-        intro = "|cffff8800Level 23|r — Gargoyles (h02O) and a massed undead assault.",
+        intro = "|cffff8800Level 23|r — Gargoyles and a massed undead assault.",
         track = 3, next = 24,
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
@@ -657,7 +676,7 @@ local LevelData = {
     },
     -- No Level 25 in original (numbering skips 24→Megaboss1→26)
     [26] = {
-        intro = "|cffff4400Level 26|r — Boosted HP and damage! Dark Warlocks (h04M) lead the charge.",
+        intro = "|cffff4400Level 26|r — Boosted HP and damage! Dark Warlocks lead the charge.",
         track = 3, next = 27,
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
@@ -668,7 +687,7 @@ local LevelData = {
         setup = setupLevel26,
     },
     [27] = {
-        intro = "|cffff8800Level 27|r — Summoners (h04O) reinforce the dark warlocks.",
+        intro = "|cffff8800Level 27|r — Summoners reinforce the dark warlocks.",
         track = 3, next = 28,
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
@@ -679,7 +698,7 @@ local LevelData = {
         victory = { type='clearAll', units={ FourCC('h04M'), FourCC('h04N'), FourCC('h04O') } },
     },
     [28] = {
-        intro = "|cffff8800Level 28|r — Spider webs across the land! Guardians (h04U) defend key zones.",
+        intro = "|cffff8800Level 28|r — Spider webs across the land! Guardians defend key zones.",
         track = 3, next = 29,
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
@@ -701,7 +720,7 @@ local LevelData = {
         end,
     },
     [29] = {
-        intro = "|cffff8800Level 29|r — Shamans (h04W) summon spirits and a caravan raider strikes.",
+        intro = "|cffff8800Level 29|r — Shamans summon spirits and a caravan raider strikes.",
         track = 3, next = 30,  -- L30 is a boss, not yet ported
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
@@ -1394,6 +1413,7 @@ local function onLevelVictory(data, levelIndex)
     StopAllMusic()        -- silence boss track on victory; vanilla wave music resumes via WaveMusicTick
     LevelBeaten = true
     PlaySoundBJ(snd.RoundClear)
+    if data.onCleared then data.onCleared() end   -- per-level victory hook (e.g. L4 prisoner rescue)
     ThingsToDoImmediatelyFollowingVictory()
     SupplyStockingItems()  -- sort ground items into cleanup zones if researched (economy/Economy.md §3)
     if data.next and LevelData[data.next] then

@@ -53,6 +53,45 @@ local function princessBoost(levels, ability)
     end
 end
 
+-- ── Tower rebuild system (war3map.j 25146-25244, 24852-24873, 25965-25996) ──────
+-- Once Rebuildable Towers (R00E) is researched: a destroyed guard tower leaves a rebuild
+-- pad that SELLS a rebuild unit — buying it removes pad + sold unit and erects the tower
+-- again. Ballista Mounts (R013) converts existing towers/pads to the ballista versions and
+-- arms the equivalent ballista pair. The trigger pairs start disabled; the researches
+-- enable them (stored in these module locals, assigned in RegisterResearchTriggers).
+local towerPair, ballistaPair = {}, {}
+
+-- tower dies -> pad; pad sells `soldId` -> tower again ("<player> has rebuilt a <label>!").
+local function makeRebuildPair(towerCode, padCode, soldCode, label)
+    local towerId, padId, soldId = FourCC(towerCode), FourCC(padCode), FourCC(soldCode)
+    local deadT = OnPlayerUnit(Player(8), EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetDyingUnit()) == towerId
+    end, function()
+        local d = GetDyingUnit()
+        CreateUnit(Player(PLAYER_NEUTRAL_PASSIVE), padId, GetUnitX(d), GetUnitY(d), bj_UNIT_FACING)
+    end)
+    DisableTrigger(deadT)
+    local sellT = OnAnyUnit(EVENT_PLAYER_UNIT_SELL, function()
+        return GetUnitTypeId(GetSoldUnit()) == soldId
+    end, function()
+        local pad, sold = GetSellingUnit(), GetSoldUnit()
+        local x, y = GetUnitX(pad), GetUnitY(pad)
+        local buyer = GetOwningPlayer(GetBuyingUnit())
+        RemoveUnit(pad)
+        RemoveUnit(sold)
+        CreateUnit(Player(8), towerId, x, y, bj_UNIT_FACING)
+        PlaySoundBJ(snd.AllianceSound)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(buyer) .. " has rebuilt a " .. label .. "!")
+    end)
+    DisableTrigger(sellT)
+    return { deadT = deadT, sellT = sellT }
+end
+
+local function enablePair(pair)
+    if pair.deadT then EnableTrigger(pair.deadT); EnableTrigger(pair.sellT) end
+end
+
 -- ── Dispatch ─────────────────────────────────────────────────────────────────
 
 function RegisterResearchTriggers()
@@ -68,6 +107,10 @@ function RegisterResearchTriggers()
         propagateResearch(code)
         if fx.onComplete then fx.onComplete(GetResearchingUnit()) end
     end)
+
+    -- guard tower h000 <-> pad n003 sells h012; ballista h04C <-> pad n00S sells h04D
+    towerPair    = makeRebuildPair('h000', 'n003', 'h012', "tower")
+    ballistaPair = makeRebuildPair('h04C', 'n00S', 'h04D', "ballista tower")
 end
 
 -- ── Registered researches (war3map.j 24775-26200; progression/Training.md §2-7) ──
@@ -96,3 +139,23 @@ registerResearch('R00D', " has researched Reinforced Towers!  (+300 max HP to al
 -- this sets the flag + announces (progression/Training.md §3; misc/MidasShipsAndMisc.md ⬜).
 registerResearch('R00Y', " has researched Seafaring! (Basic ships will begin to dock at Vern's Harbor.)",
     function() SeafaringLv1 = true end)
+
+-- Rebuildable Towers (R00E, war3map.j 24852-24873) — arms the tower-rebuild pair: destroyed
+-- guard towers leave pads that sell the rebuild unit.
+registerResearch('R00E',
+    " has researched Rebuildable Towers!  (Guard towers can be rebuilt after being destroyed!)",
+    function() enablePair(towerPair) end)
+
+-- Ballista Mounts (R013, war3map.j 25965-25996) — converts existing towers/pads to the
+-- ballista versions and arms the ballista rebuild pair.
+registerResearch('R013',
+    " has researched Ballista Mounts (Guard Towers turn into Ballista Towers.)",
+    function()
+        local g = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h000'))
+        ForGroup(g, function() ReplaceUnitBJ(GetEnumUnit(), FourCC('h04C'), bj_UNIT_STATE_METHOD_RELATIVE) end)
+        DestroyGroup(g)
+        local pads = GetUnitsOfTypeIdAll(FourCC('n003'))
+        ForGroup(pads, function() ReplaceUnitBJ(GetEnumUnit(), FourCC('n00S'), bj_UNIT_STATE_METHOD_RELATIVE) end)
+        DestroyGroup(pads)
+        enablePair(ballistaPair)
+    end)

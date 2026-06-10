@@ -291,6 +291,33 @@ local function registerMidas()
     end)
 end
 
+-- Energy (= LUMBER) regeneration — war3map.j 14385-14423. Every 3s, each player below 100
+-- energy gains +EnergyRegenTotal; 2s later, anyone above 100 decays by 1 (soft cap 100).
+-- Powers the energy-based classes (Engineer's lumber, Energy Drink item) and the W22/W27
+-- weather effects that tweak EnergyRegenTotal. Started at gameplay start (BeginningStart2).
+local energyRegenStarted = false
+function StartEnergyRegeneration()
+    if energyRegenStarted then return end
+    energyRegenStarted = true
+    local t = CreateTrigger()   -- periodic trigger, not a timer: the action sleeps mid-way
+    TriggerRegisterTimerEventPeriodic(t, 3.0)
+    TriggerAddAction(t, function()
+        ForForce(GetPlayersAll(), function()
+            local p = GetEnumPlayer()
+            if GetPlayerState(p, PLAYER_STATE_RESOURCE_LUMBER) < 100 then
+                AdjustPlayerStateBJ(EnergyRegenTotal, p, PLAYER_STATE_RESOURCE_LUMBER)
+            end
+        end)
+        TriggerSleepAction(2.0)
+        ForForce(GetPlayersAll(), function()
+            local p = GetEnumPlayer()
+            if GetPlayerState(p, PLAYER_STATE_RESOURCE_LUMBER) > 100 then
+                AdjustPlayerStateBJ(-1, p, PLAYER_STATE_RESOURCE_LUMBER)
+            end
+        end)
+    end)
+end
+
 function RegisterMiscTriggers()
     registerLevelUpFloaters()
     RegisterHeroDeathCries()

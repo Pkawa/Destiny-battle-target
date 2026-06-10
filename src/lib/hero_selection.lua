@@ -516,6 +516,7 @@ function BeginningStart2()
     -- Stop the intro and bring in vanilla gameplay music ~4s before wave 1 spawns.
     EndIntroMusic()
     BeginWaveMusic()
+    StartEnergyRegeneration()   -- lumber = Energy starts ticking with gameplay (misc.lua)
     TriggerSleepAction(2.0)
 
     -- Start Level 1 — unless debug -stop was enabled pre-game, in which case hold the

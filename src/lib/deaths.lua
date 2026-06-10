@@ -10,8 +10,10 @@
 local P8, P9, P12 = Player(8), Player(9), Player(12)
 
 local function isPlayerHero(u)
-    local o = GetOwningPlayer(u)
-    return IsUnitType(u, UNIT_TYPE_HERO) and o ~= P8 and o ~= P9
+    -- Only heroes owned by the 8 player slots. Excluding by id (not just P8/P9) keeps the
+    -- hero-pool ROSTER/preview heroes (P11/P12/neutral) out of the count — they made the
+    -- near-defeat check report absurd "remaining heroes" totals (KNOWN_BUGS §12).
+    return IsUnitType(u, UNIT_TYPE_HERO) and GetPlayerId(GetOwningPlayer(u)) <= 7
 end
 
 -- Cached filters: player heroes with life ≥ 1 (still standing) / ≥ 2 (the near-defeat check).
@@ -50,9 +52,7 @@ function RegisterHeroDeathTriggers()
     TriggerRegisterAnyUnitEventBJ(gl, EVENT_PLAYER_UNIT_DEATH)
     TriggerAddCondition(gl, Condition(function()
         local d = GetDyingUnit()
-        local o = GetOwningPlayer(d)
-        return IsUnitType(d, UNIT_TYPE_HERO)
-            and o ~= P8 and o ~= P9 and o ~= P12
+        return isPlayerHero(d)
             and d ~= DeathWardedTarget and d ~= WildbondPet
     end))
     TriggerAddAction(gl, function()

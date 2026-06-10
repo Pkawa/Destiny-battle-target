@@ -182,7 +182,25 @@ local function setupEngineer()
     end)
 end
 
+-- ══ Arcane Archer (H01O) — war3map.j 37439-37462 ════════════════════════════════
+-- Far Shot (learn A03J): each rank applies the R00O range upgrade at the new rank and
+-- extends the archer's acquisition range by 200 so she actually engages at the new range.
+
+local function setupArcaneArcher()
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A03J')
+    end, function()
+        local archer = GetLearningUnit()
+        FarShotTotal = FarShotTotal + 1
+        local rank = FarShotTotal
+        TriggerSleepAction(2.0)
+        SetPlayerTechResearchedSwap(FourCC('R00O'), rank, GetOwningPlayer(archer))
+        SetUnitAcquireRangeBJ(archer, GetUnitAcquireRange(archer) + 200.0)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
+    setupArcaneArcher()
 end
