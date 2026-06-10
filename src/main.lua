@@ -60,6 +60,9 @@ RegisterItemDropTriggers()
 -- Register loot-box purchases (buy a box token from a base shop -> random pool item)
 RegisterPurchaseTriggers()
 
+-- Register the item-effect dispatch (scaling actives; registry filled per item — items/ItemEffects.md)
+RegisterItemEffectTriggers()
+
 -- Register bulk sell, item shop, and supply stocking systems (economy/Economy.md §3-6)
 RegisterSellTriggers()
 RegisterItemShopTriggers()

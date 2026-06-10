@@ -24,7 +24,7 @@
 -- Count casts of `abil`; once the counter exceeds `threshold`, latch flag + caster's owner.
 local function spellCounter(abil, counter, threshold, flag, playerVar)
     OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
-        return GetSpellAbilityId() == FourCC(abil)
+        return GetSpellAbilityId() == abil
     end, function()
         if _G[counter] > threshold then
             DisableTrigger(GetTriggeringTrigger())
@@ -39,10 +39,10 @@ end
 -- Cast `abil` on a DIFFERENT hero (not `selfType`) at/below `hpThreshold` life → latch.
 local function spellOnOtherHero(abil, selfType, hpThreshold, flag, playerVar)
     OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
-        return GetSpellAbilityId() == FourCC(abil)
+        return GetSpellAbilityId() == abil
     end, function()
         local tgt = GetSpellTargetUnit()
-        if GetUnitTypeId(tgt) ~= FourCC(selfType)
+        if GetUnitTypeId(tgt) ~= selfType
             and GetUnitStateSwap(UNIT_STATE_LIFE, tgt) <= hpThreshold
             and IsUnitType(tgt, UNIT_TYPE_HERO) then
             DisableTrigger(GetTriggeringTrigger())
@@ -55,7 +55,7 @@ end
 -- Learn `abil` to its 4th rank → latch. `playerVar` may be nil (some classes don't set it).
 local function skillRankCounter(abil, counter, flag, playerVar)
     OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
-        return GetLearnedSkillBJ() == FourCC(abil)
+        return GetLearnedSkillBJ() == abil
     end, function()
         _G[counter] = _G[counter] + 1
         if _G[counter] == 4 then
@@ -69,7 +69,7 @@ end
 -- `killerType` gets `threshold`+1 kills → latch flag + the killer's owner.
 local function killCounter(killerType, counter, threshold, flag, playerVar)
     OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
-        return GetUnitTypeId(GetKillingUnitBJ()) == FourCC(killerType)
+        return GetUnitTypeId(GetKillingUnitBJ()) == killerType
     end, function()
         if _G[counter] > threshold then
             DisableTrigger(GetTriggeringTrigger())
@@ -85,7 +85,7 @@ function RegisterAchievementTriggers()
 
     -- ── Cleric of Order ───────────────────────────────────────────────────────
     -- BonusA: cast Heal (A002) on a different hero at ≤75 HP (JASS 7486)
-    spellOnOtherHero('A002', 'H001', 75, 'ClericofOrderBonusA', 'ClericofOrderPlayer')
+    spellOnOtherHero(ABIL.Heal, UID.ClericOfOrder, 75, 'ClericofOrderBonusA', 'ClericofOrderPlayer')
 
     -- BonusB: cast Mark of Order (A001) when target has >9 units within 350 (JASS 7529)
     do
@@ -129,7 +129,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: cast Flurry of Slingstones (A005) >25 times (JASS 7609)
-    spellCounter('A005', 'ClericSmallFolkSlingshotBonus', 24, 'ClericOTSFBonusB', 'ClericOTSFPlayer')
+    spellCounter(ABIL.FlurryOfSlingstones, 'ClericSmallFolkSlingshotBonus', 24, 'ClericOTSFBonusB', 'ClericOTSFPlayer')
 
     -- ── Dwarven Axemaster ─────────────────────────────────────────────────────
     -- BonusA: Living Axe (h00A/h009/h008) kills 10+ units (JASS 7646)
@@ -152,7 +152,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: all 4 ranks of Aggression (A00C) learned (JASS 7696)
-    skillRankCounter('A00C', 'Aggression', 'DwarvenAxeMasterBonusB')
+    skillRankCounter(ABIL.Aggression, 'Aggression', 'DwarvenAxeMasterBonusB')
 
     -- ── Monk of the Ebony Fist ────────────────────────────────────────────────
     -- BonusA: cast Chakra Burst (A00H) with >4 heroes within 600 (JASS 7733)
@@ -248,14 +248,14 @@ function RegisterAchievementTriggers()
 
     -- ── Master of the Art ─────────────────────────────────────────────────────
     -- BonusA: Blast (A00K) used 50+ times (JASS 7900)
-    spellCounter('A00K', 'BlastCast', 49, 'MasterOTABonusA', 'MasterOfTheArtPlayer')
+    spellCounter(ABIL.Blast, 'BlastCast', 49, 'MasterOTABonusA', 'MasterOfTheArtPlayer')
 
     -- BonusB: Essence Shock (A00L) used 35+ times (JASS 7937)
-    spellCounter('A00L', 'EssenceShockCast', 34, 'MasterOTABonusB', 'MasterOfTheArtPlayer')
+    spellCounter(ABIL.EssenceShock, 'EssenceShockCast', 34, 'MasterOTABonusB', 'MasterOfTheArtPlayer')
 
     -- ── Feral Archon ──────────────────────────────────────────────────────────
     -- BonusA: Tantrum (A00X) used 5+ times (JASS 7974)
-    spellCounter('A00X', 'TantrumCast', 4, 'FeralArchonBonus', 'FeralArchonPlayer')
+    spellCounter(ABIL.Tantrum, 'TantrumCast', 4, 'FeralArchonBonus', 'FeralArchonPlayer')
 
     -- BonusB: O000 (Feral Archon) kills a hero (JASS 8011)
     do
@@ -298,7 +298,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: Violent Engineer — H00F kills 40+ units (JASS 8040)
-    killCounter('H00F', 'TotalEngyKills', 39, 'HumanEngineerBonusB', 'HumanEngineerPlayer')
+    killCounter(UID.HumanEngineer, 'TotalEngyKills', 39, 'HumanEngineerBonusB', 'HumanEngineerPlayer')
 
     -- ── Earthen Templar ───────────────────────────────────────────────────────
     -- BonusA: Rage of Earth — >5 living Earth Elementals (h011) on map (JASS 8110)
@@ -325,7 +325,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: Supreme Smasher — H00S kills 100+ units (JASS 8150)
-    killCounter('H00S', 'TotalETKills', 99, 'EarthenTemplarBonusB', 'EarthenTemplarPlayer')
+    killCounter(UID.EarthenTemplar, 'TotalETKills', 99, 'EarthenTemplarBonusB', 'EarthenTemplarPlayer')
 
     -- ── Man-at-Arms ───────────────────────────────────────────────────────────
     -- BonusA: Pay Raise — WageTotal >= 500 (JASS 8205)
@@ -343,7 +343,7 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusB: Hoarse Throat — Battle Shout (A024) used 15+ times (JASS 8215)
-    spellCounter('A024', 'BattleShoutCount', 14, 'ManAtArmsBonusB', 'ManAtArmsPlayer')
+    spellCounter(ABIL.BattleShout, 'BattleShoutCount', 14, 'ManAtArmsBonusB', 'ManAtArmsPlayer')
 
     -- ── Sun Soul ──────────────────────────────────────────────────────────────
     -- Penalty: E004 kills an ally hero (JASS 8252)
@@ -365,21 +365,21 @@ function RegisterAchievementTriggers()
     end
 
     -- BonusA: Solar Barrier (A02G) used 10+ times (JASS 8286)
-    spellCounter('A02G', 'SolarCount', 9, 'SunSoulBonusA', 'SunSoulPlayer')
+    spellCounter(ABIL.SolarBarrier, 'SolarCount', 9, 'SunSoulBonusA', 'SunSoulPlayer')
 
     -- BonusB: Sunbeam (A02F) used 15+ times (JASS 8323)
-    spellCounter('A02F', 'SunbeamCount', 14, 'SunSoulBonusB', 'SunSoulPlayer')
+    spellCounter(ABIL.Sunbeam, 'SunbeamCount', 14, 'SunSoulBonusB', 'SunSoulPlayer')
 
     -- ── Paladin of Justice ────────────────────────────────────────────────────
     -- BonusA: Holy Healer — Lay on Hands (A02M) on another hero at ≤175 HP (JASS 8360)
-    spellOnOtherHero('A02M', 'H01J', 175, 'PaladinJusticeBonusA', 'PaladinJusticePlayer')
+    spellOnOtherHero(ABIL.LayOnHands, UID.PaladinOfJustice, 175, 'PaladinJusticeBonusA', 'PaladinJusticePlayer')
 
     -- BonusB: Crusader — H01J kills 50+ units (JASS 8403)
-    killCounter('H01J', 'TotalPoJKills', 49, 'PaladinJusticeBonusB', 'PaladinJusticePlayer')
+    killCounter(UID.PaladinOfJustice, 'TotalPoJKills', 49, 'PaladinJusticeBonusB', 'PaladinJusticePlayer')
 
     -- ── Dwarven Rockfighter ───────────────────────────────────────────────────
     -- BonusA: Titan Strength — all 4 ranks of Dwarven Stamina (A037) (JASS 8440)
-    skillRankCounter('A037', 'DwarvenStamina', 'DwarvenRFBonusA', 'DwarvenRFPlayer')
+    skillRankCounter(ABIL.DwarvenStamina, 'DwarvenStamina', 'DwarvenRFBonusA', 'DwarvenRFPlayer')
 
     -- BonusB: Fearful Presence — Intimidating Shout (A035) hits >9 P9 living units (JASS 8478)
     do
@@ -410,18 +410,18 @@ function RegisterAchievementTriggers()
     -- ── Disciple of Grace ─────────────────────────────────────────────────────
     -- BonusA: Aura of Grace — Moonbeam Rejuvenation (A039) used 20+ times (JASS 8528)
     -- BonusB (Death Ward save) is handled in feats.lua when the Disciple feat is picked.
-    spellCounter('A039', 'DiscipleMRCount', 19, 'DiscipleBonusA', 'DisciplePlayer')
+    spellCounter(ABIL.MoonbeamRejuv, 'DiscipleMRCount', 19, 'DiscipleBonusA', 'DisciplePlayer')
 
     -- ── Arcane Archer ─────────────────────────────────────────────────────────
     -- BonusA: Power Shot — all 4 ranks of Far Shot (A03J) learned (JASS 8565)
-    skillRankCounter('A03J', 'FarShotTotal', 'ArcaneArcherBonusA', 'ArcaneArcherPlayer')
+    skillRankCounter(ABIL.FarShot, 'FarShotTotal', 'ArcaneArcherBonusA', 'ArcaneArcherPlayer')
 
     -- BonusB: Sniper — Eagle Arrow (A03I) used 15+ times (JASS 8603)
-    spellCounter('A03I', 'EagleArrowTotal', 14, 'ArcaneArcherBonusB', 'ArcaneArcherPlayer')
+    spellCounter(ABIL.EagleArrow, 'EagleArrowTotal', 14, 'ArcaneArcherBonusB', 'ArcaneArcherPlayer')
 
     -- ── Axe Brother ───────────────────────────────────────────────────────────
     -- BonusA: Whirling Dervish — Whirlwind Attack (A03M) used 20+ times (JASS 8640)
-    spellCounter('A03M', 'WhirlwindAttack', 19, 'AxeBrotherBonusA', 'AxeBrotherPlayer')
+    spellCounter(ABIL.WhirlwindAttack, 'WhirlwindAttack', 19, 'AxeBrotherBonusA', 'AxeBrotherPlayer')
 
     -- BonusB: Savage Fighter — Decimate procs 50+ times (JASS 8677)
     -- No event. Called by Decimate proc trigger via TriggerExecute(trg_AxeBrotherSavageFighter).
@@ -497,17 +497,17 @@ function RegisterAchievementTriggers()
 
     -- ── Cleric of Elven Word ──────────────────────────────────────────────────
     -- BonusA: Mender — Regrowth (A05D) on another hero at ≤100 HP (JASS 8803)
-    spellOnOtherHero('A05D', 'H02C', 100, 'ClericElvenWordBonusA', 'ClericEWPlayer')
+    spellOnOtherHero(ABIL.Regrowth, UID.ClericElvenWord, 100, 'ClericElvenWordBonusA', 'ClericEWPlayer')
 
     -- BonusB: Mistress of Blessings — Elven Blessing (A05C) used 10+ times (JASS 8846)
-    spellCounter('A05C', 'ElvenBlessingCount', 9, 'ClericElvenWordBonusB', 'ClericEWPlayer')
+    spellCounter(ABIL.ElvenBlessing, 'ElvenBlessingCount', 9, 'ClericElvenWordBonusB', 'ClericEWPlayer')
 
     -- ── Crested Drake ─────────────────────────────────────────────────────────
     -- BonusA: Firebreather — Flame Wreath (A05F) used 25+ times (JASS 8883)
-    spellCounter('A05F', 'FlameWreathCount', 24, 'CrestedDrakeBonusA', 'CrestedDrakePlayer')
+    spellCounter(ABIL.FlameWreath, 'FlameWreathCount', 24, 'CrestedDrakeBonusA', 'CrestedDrakePlayer')
 
     -- BonusB: Fangterror — all 4 ranks of Drakefang (A05H) learned (JASS 8920)
-    skillRankCounter('A05H', 'DrakeFangCount', 'CrestedDrakeBonusB', 'CrestedDrakePlayer')
+    skillRankCounter(ABIL.Drakefang, 'DrakeFangCount', 'CrestedDrakeBonusB', 'CrestedDrakePlayer')
 
     -- ── Reckless Pyromancer ───────────────────────────────────────────────────
     -- Penalty: E00E kills an ally hero with a spell (JASS 8958)

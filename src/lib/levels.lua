@@ -338,7 +338,7 @@ local LevelData = {
         intro = "|cffff8800Level 1|r — Squires approach. Defend the town!",
         track = 1, next = 2,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h002'), n=5, dm=1,  at=ABC },
         },
         victory = { type='clearAll', units={ FourCC('h002') } },
@@ -347,7 +347,7 @@ local LevelData = {
         intro = "|cffff8800Level 2|r — More squires, now with riflemen.",
         track = 2, next = 3,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h002'), n=6, dm=1,  at=ABC },
             { u=FourCC('h005'), n=0, dm=1,  at=ABC },
         },
@@ -357,7 +357,7 @@ local LevelData = {
         intro = "|cffff8800Level 3|r — Archers join the assault.",
         track = 3, next = 4,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h002'), n=4, dm=1,  at=ABC },
             { u=FourCC('h005'), n=0, dm=1,  at=ABC },
             { u=FourCC('n001'), n=2, dm=1,  at=ABC },
@@ -377,7 +377,7 @@ local LevelData = {
         intro = "|cffff8800Level 5|r — Knights (h00B) reinforce the enemy.",
         track = 2, next = 6,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h002'), n=1, dm=1,  at=ABC },
             { u=FourCC('h005'), n=0, dm=1,  at=ABC },
             { u=FourCC('h00B'), n=1, dm=1,  at=ABC },
@@ -388,7 +388,7 @@ local LevelData = {
         intro = "|cffff3300Level 6 — MINIBOSS!|r A Paladin commander leads the charge.",
         next = 7, boss = true, setup = setupLevel6Boss,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at='B' },
+            { u=UID.SpeedWisp, n=1,        at='B' },
             { u=FourCC('h002'), n=9, dm=1,  at='B' },
             { u=FourCC('h005'), n=5, dm=1,  at='B' },
             { u=FourCC('H00C'), n=1,        at='B' },   -- the miniboss
@@ -402,7 +402,7 @@ local LevelData = {
         intro = "|cffff8800Level 7|r — Demons spill from the hell rift.",
         track = 1, next = 8,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h00X'), n=3, dm=1,  at=ABC },
             { u=FourCC('h015'), n=2, dm=1,  at=ABC },
             { u=FourCC('h01R'), n=1,        at='HellSpawn' },
@@ -413,7 +413,7 @@ local LevelData = {
         intro = "|cffff8800Level 8|r — Fire-casters (h00Y) among the demons.",
         track = 2, next = 9, setup = setupLevel8AI,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h00X'), n=2, dm=1,  at=ABC },
             { u=FourCC('h015'), n=2, dm=1,  at=ABC },
             { u=FourCC('h00Y'), n=2, dm=1,  at=ABC },
@@ -427,7 +427,7 @@ local LevelData = {
         intro = "|cffff8800Level 9|r — A caravan raider (h06O) and brutes (n002) attack.",
         track = 3, next = 10,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h06O'), n=1,        at='CaravanPathA' },
             { u=FourCC('h00X'), n=2, dm=1,  at=ABC },
             { u=FourCC('h015'), n=2, dm=1,  at=ABC },
@@ -441,7 +441,7 @@ local LevelData = {
         intro = "|cffff3300Level 10 — BOSS: The Goblin King!|r",
         next = 11, boss = true, setup = setupLevel10Boss,
         spawns = {
-            { u=FourCC('e01M'), n=1,         at='B' },
+            { u=UID.SpeedWisp, n=1,         at='B' },
             { u=FourCC('h00X'), n=9, dm=2,   at='B' },
             { u=FourCC('h015'), n=5, dm=1,   at='B' },
             { u=FourCC('n002'), n=1, dm=1,   at='B' },
@@ -462,7 +462,7 @@ local LevelData = {
         intro = "|cffff8800Level 11|r — Heavier demons (h014/h00W) and infernals.",
         track = 1, next = 12,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h014'), n=2, dm=1,  at=ABC },
             { u=FourCC('h00W'), n=2, dm=1,  at=ABC },
             { u=FourCC('h016'), n=0, dm=1,  at=ABC },
@@ -475,7 +475,7 @@ local LevelData = {
         intro = "|cffff8800Level 12|r — The demon horde swells (adds h017).",
         track = 2, next = 13,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h014'), n=2, dm=1,  at=ABC },
             { u=FourCC('h00W'), n=2, dm=1,  at=ABC },
             { u=FourCC('h016'), n=0, dm=1,  at=ABC },
@@ -498,7 +498,7 @@ local LevelData = {
         intro = "|cffff8800Level 14|r — Escort the caravan! Defend against ambushes.",
         track = 1, next = 15,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h01E'), n=3, dm=1, at=ABC },
             { u=FourCC('h01F'), n=2, dm=1, at=ABC },
             { u=FourCC('h01G'), n=1, dm=1, at=ABC },
@@ -510,7 +510,7 @@ local LevelData = {
         intro = "|cffff8800Level 15|r — Undead infantry with hellspawn support.",
         track = 2, next = 16,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h01E'), n=3, dm=1, at=ABC },
             { u=FourCC('h01F'), n=2, dm=1, at=ABC },
             { u=FourCC('h01R'), n=0, dm=1, at='HellSpawn' },
@@ -523,7 +523,7 @@ local LevelData = {
         intro = "|cffff8800Level 16|r — Warlocks (h01G) slow your heroes.",
         track = 3, next = 17,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h01E'), n=3, dm=1, at=ABC },
             { u=FourCC('h01F'), n=2, dm=1, at=ABC },
             { u=FourCC('h01G'), n=2, dm=1, at=ABC },
@@ -538,7 +538,7 @@ local LevelData = {
         intro = "|cffff8800Level 17|r — Necromancers (h01H) join the undead host.",
         track = 1, next = 18,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h01E'), n=3, dm=1, at=ABC },
             { u=FourCC('h01F'), n=2, dm=1, at=ABC },
             { u=FourCC('h01G'), n=2, dm=1, at=ABC },
@@ -566,7 +566,7 @@ local LevelData = {
         intro = "|cffff4400Level 19|r — Boosted enemy HP! The undead surge forward.",
         track = 3, next = 20,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
             { u=FourCC('h01E'), n=3, dm=1, at=ABC },
             { u=FourCC('h01F'), n=2, dm=1, at=ABC },
@@ -584,7 +584,7 @@ local LevelData = {
         intro = "|cffff0000Level 20 — BOSS: Undead Behemoth!|r",
         next = 21, boss = true,
         spawns = {
-            { u=FourCC('e01M'), n=1,  at=ABC },
+            { u=UID.SpeedWisp, n=1,  at=ABC },
             { u=FourCC('h01E'), n=5,  at='B' },
             { u=FourCC('h01G'), n=3,  at='B' },
             { u=FourCC('h01H'), n=3,  at='B' },
@@ -608,7 +608,7 @@ local LevelData = {
         intro = "|cffff8800Level 22|r — Spectral undead (h01S) and river trolls (n00F) advance.",
         track = 2, next = 23,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h01S'), n=3, dm=1, at=ABC },
             { u=FourCC('h01R'), n=3, dm=1, at=ABC },
             { u=FourCC('n00F'), n=2, dm=1, at=ABC },
@@ -623,7 +623,7 @@ local LevelData = {
         intro = "|cffff8800Level 23|r — Gargoyles (h02O) and a massed undead assault.",
         track = 3, next = 24,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h01S'), n=3, dm=1, at=ABC },
             { u=FourCC('h01R'), n=3, dm=1, at=ABC },
             { u=FourCC('n00F'), n=2, dm=1, at=ABC },
@@ -640,7 +640,7 @@ local LevelData = {
         intro = "|cffff4400Level 24|r — The final wave before the Megaboss!",
         track = 3, next = nil,  -- chains to Megaboss 1 (not yet ported)
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
             { u=FourCC('h01S'), n=3, dm=1, at=ABC },
             { u=FourCC('h01R'), n=2, dm=1, at=ABC },
@@ -660,7 +660,7 @@ local LevelData = {
         intro = "|cffff4400Level 26|r — Boosted HP and damage! Dark Warlocks (h04M) lead the charge.",
         track = 3, next = 27,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h04M'), n=3, dm=1, at=ABC },
             { u=FourCC('h04N'), n=1, dm=1, at=ABC },
         },
@@ -671,7 +671,7 @@ local LevelData = {
         intro = "|cffff8800Level 27|r — Summoners (h04O) reinforce the dark warlocks.",
         track = 3, next = 28,
         spawns = {
-            { u=FourCC('e01M'), n=1,        at=ABC },
+            { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h04M'), n=3, dm=1,  at=ABC },
             { u=FourCC('h04N'), n=1, dm=1,  at=ABC },
             { u=FourCC('h04O'), n=0, dm=4,  at=ABC },  -- 4*DM summons (multiply variant)
@@ -682,7 +682,7 @@ local LevelData = {
         intro = "|cffff8800Level 28|r — Spider webs across the land! Guardians (h04U) defend key zones.",
         track = 3, next = 29,
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h04M'), n=3, dm=1, at=ABC },
             { u=FourCC('h04N'), n=1, dm=1, at=ABC },
             { u=FourCC('h04O'), n=0, dm=4, at=ABC },
@@ -704,7 +704,7 @@ local LevelData = {
         intro = "|cffff8800Level 29|r — Shamans (h04W) summon spirits and a caravan raider strikes.",
         track = 3, next = 30,  -- L30 is a boss, not yet ported
         spawns = {
-            { u=FourCC('e01M'), n=1,       at=ABC },
+            { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
             { u=FourCC('h04M'), n=3, dm=1, at=ABC },
             { u=FourCC('h04N'), n=1, dm=1, at=ABC },
@@ -1166,7 +1166,7 @@ end
 local function removeSpeedWispsAfter(delay)
     local t = CreateTimer()
     TimerStart(t, delay, false, function()
-        local wisps = GetUnitsOfPlayerAndTypeId(P9, FourCC('e01M'))
+        local wisps = GetUnitsOfPlayerAndTypeId(P9, UID.SpeedWisp)
         ForGroup(wisps, function() RemoveUnit(GetEnumUnit()) end)
         DestroyGroup(wisps)
     end)

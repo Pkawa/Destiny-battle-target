@@ -99,3 +99,10 @@ function FloatText(unit, text, r, g, b, life)
     SetTextTagLifespanBJ(tag, life or 5.0)
     return tag
 end
+
+-- ── Scaling ───────────────────────────────────────────────────────────────────
+-- Linear hero-level scaling: base + perLevel per hero level. GetHeroLevel returns 0 for
+-- non-heroes, so a non-hero caster gets `base`. (See items/ItemEffects.md convention.)
+function Scaled(base, perLevel, unit)
+    return base + perLevel * GetHeroLevel(unit)
+end
