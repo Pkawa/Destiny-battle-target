@@ -57,6 +57,33 @@ function fxHeal()
     end
 end
 
+-- Spell-damage every enemy within `radius` of the cast point (or the caster, if
+-- `aroundCaster`). Approximate AoE — it hits enemies near the impact, not the template's
+-- exact line/cone, which is fine for an additive bonus on Shockwave / War Stomp nukes.
+function fxDamageArea(radius, aroundCaster, attackType, damageType)
+    return function(caster, target, amount)
+        local x, y
+        if aroundCaster then
+            x, y = GetUnitX(caster), GetUnitY(caster)
+        elseif target then
+            x, y = GetUnitX(target), GetUnitY(target)
+        else
+            x, y = GetSpellTargetX(), GetSpellTargetY()
+        end
+        local owner = GetOwningPlayer(caster)
+        ForUnitsInRange(x, y, radius, function()
+            local u = GetFilterUnit()
+            return IsUnitEnemy(u, owner)
+                and not IsUnitType(u, UNIT_TYPE_STRUCTURE)
+                and GetUnitState(u, UNIT_STATE_LIFE) > 0.405
+        end, function()
+            UnitDamageTarget(caster, GetEnumUnit(), amount, false, false,
+                attackType or ATTACK_TYPE_NORMAL, damageType or DAMAGE_TYPE_MAGIC,
+                WEAPON_TYPE_WHOKNOWS)
+        end)
+    end
+end
+
 -- ── Dispatch ──────────────────────────────────────────────────────────────────
 
 local function runFX(fx, caster, target)
@@ -95,6 +122,12 @@ do
     registerItemFX(FourCC('A0AE'), 0, 5, nuke)  -- I05U       Storm Bolt (200 base + 5/lvl)
     registerItemFX(FourCC('A0BO'), 0, 5, nuke)  -- I06K       Storm Bolt (200 base + 5/lvl, 4s stun)
     registerItemFX(FourCC('A0BP'), 0, 5, nuke)  -- I06L       Holy Bolt  (200 base + 5/lvl)
+    registerItemFX(FourCC('A0BQ'), 0, 5, nuke)  -- I06M (Rare) Storm Bolt (200 base + 5/lvl)
+    -- AoE nukes: additive bonus to enemies near the impact (Shockwave) / caster (War Stomp).
+    registerItemFX(FourCC('A00F'), 0, 5,
+        fxDamageArea(220, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC))  -- I01F  Shockwave (150 base + 5/lvl)
+    registerItemFX(FourCC('A08W'), 0, 5,
+        fxDamageArea(250, true,  ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC))  -- I04T  War Stomp (AoE + 5/lvl)
 end
 
 -- To register more: read the item's A0xx ability base in dirty/objects_items.json +
