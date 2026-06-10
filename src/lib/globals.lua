@@ -202,6 +202,10 @@ EngineerPlayer          = nil
 -- Earthen Templar — Earthen Presence proc state (abilities.lua)
 EarthenPresence         = 0   -- current rank (0 = unlearned)
 EarthenChance           = 0   -- last proc roll (1-50)
+-- Rogue of the Dark — Stealth stack state (abilities.lua)
+RogueDamageStacks       = 0   -- built every 2s while not attacking; discharged on attack
+RogueMaxDamageStacks    = 0   -- +5 per Stealth rank
+HasRogueAttacked        = false
 CentaurTreantTotal      = 2
 AidAnotherTimer         = 5.0
 SofUnityLowestLevel     = 100

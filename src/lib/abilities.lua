@@ -199,8 +199,103 @@ local function setupArcaneArcher()
     end)
 end
 
+-- ══ Rogue of the Dark (E001) — war3map.j 45544-45760 ════════════════════════════
+-- Stealth (A00P): builds +1 damage stack every 2s while not attacking (cap +5/rank); the
+-- next attack discharges AGI × stacks bonus damage. Learning it also adds the A059 display
+-- passive (the command-card icon). Murder (A00R): instakill a non-hero target that is
+-- ISOLATED (≤1 living enemy within 400). Dagger in the Dark (A0JI): refill stacks + reset
+-- Murder's cooldown. Blind (A00Q): the e01A dummy paints a fog cloud at the target point.
+
+local ROGUE = FourCC('E001')
+
+local function setupRogue()
+    local stacksT, attackT
+
+    -- Stealth_Damage (2s tick, armed on first Stealth rank): build stacks while passive.
+    stacksT = CreateTrigger()
+    DisableTrigger(stacksT)
+    TriggerRegisterTimerEventPeriodic(stacksT, 2.0)
+    TriggerAddAction(stacksT, function()
+        if not HasRogueAttacked then
+            if RogueDamageStacks < RogueMaxDamageStacks then
+                RogueDamageStacks = RogueDamageStacks + 1
+            end
+        else
+            HasRogueAttacked = false
+        end
+    end)
+
+    -- Rogue_Attacks: discharge the stacks as AGI × stacks bonus damage.
+    attackT = CreateTrigger()
+    DisableTrigger(attackT)
+    TriggerRegisterAnyUnitEventBJ(attackT, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(attackT, Condition(function()
+        return GetUnitTypeId(GetAttacker()) == ROGUE
+    end))
+    TriggerAddAction(attackT, function()
+        local rogue, victim = GetAttacker(), GetAttackedUnitBJ()
+        if RogueDamageStacks > 0 then
+            TriggerSleepAction(0.25)
+            local dmg = GetHeroAgi(rogue, true) * RogueDamageStacks
+            FloatText(victim, tostring(dmg), 100, 0, 0, 3.0)
+            UnitDamageTarget(rogue, victim, dmg, false, false,
+                ATTACK_TYPE_HERO, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+            RogueDamageStacks = 0
+        end
+        HasRogueAttacked = true
+    end)
+
+    -- Learn Stealth (A00P): +5 max stacks per rank, arm the stack system, and add the
+    -- A059 display passive so the skill shows on the command card (Button_for_Stealth).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A00P')
+    end, function()
+        RogueMaxDamageStacks = RogueMaxDamageStacks + 5
+        UnitAddAbility(GetLearningUnit(), FourCC('A059'))
+        TriggerSleepAction(1.0)
+        EnableTrigger(stacksT)
+        EnableTrigger(attackT)
+    end)
+
+    -- Murder_Cast (A00R on a NON-hero): instakill only when the target is isolated —
+    -- at most 1 living Player(9) unit (itself) within 400 (war3map.j 45691-45729).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A00R')
+            and not IsUnitType(GetSpellTargetUnit(), UNIT_TYPE_HERO)
+    end, function()
+        local target = GetSpellTargetUnit()
+        local near = CountInRange(GetUnitX(target), GetUnitY(target), 400.0, function()
+            local f = GetFilterUnit()
+            return GetOwningPlayer(f) == P9 and IsUnitAliveBJ(f)
+        end)
+        if near <= 1 then
+            UnitDamageTarget(GetSpellAbilityUnit(), target, 99999.0, false, false,
+                ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+            FloatText(target, "Murder!", 100, 100, 100, 3.0)
+        end
+    end)
+
+    -- Dagger in the Dark (A0JI): refill stacks to max + reset Murder's cooldown.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0JI')
+    end, function()
+        RogueDamageStacks = RogueMaxDamageStacks
+        BlzEndUnitAbilityCooldown(GetSpellAbilityUnit(), FourCC('A00R'))
+    end)
+
+    -- Blind (A00Q): the e01A dummy paints a fog cloud on the target point.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A00Q')
+    end, function()
+        if unit_e01A and GetUnitTypeId(unit_e01A) ~= 0 then
+            IssuePointOrder(unit_e01A, "cloudoffog", GetSpellTargetX(), GetSpellTargetY())
+        end
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
     setupArcaneArcher()
+    setupRogue()
 end

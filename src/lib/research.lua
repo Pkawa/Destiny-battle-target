@@ -153,6 +153,89 @@ registerResearch('R015', " has researched Improved Rudders (New ships shall begi
 -- propagation applies it (war3map.j Harbor_Expansionism).
 registerResearch('R017', " has researched Harbor Expansionism (An additional building plot has been constructed at the Harbor.)")
 
+-- ── Completion sweep (war3map.j 24775-26260; extracted via dirty/extract_research.py) ──
+-- Fountain & tower upgrades: the bonus itself is the WC3 upgrade (propagation applies it).
+registerResearch('R00B', " has researched Flowing Waters!  (+50 percent mana regeneration to the Fountain of Replenishment!)")
+registerResearch('R00C', " has researched Improved Fountain of Replenishment!  (+250 max mana to the Fountain of Replenishment!)")
+registerResearch('R00I', " has researched Aerodynamics! (Guard Tower Damage +5)")
+
+-- Gold-loss tiers (deaths.lua reads CurrentGoldDeathUpgrade: 0=50, 1=25, 2=10 percent).
+registerResearch('R00K', " has researched Safe Pouches!  (Gold loss penalty for dying reduced by 25 percent!)",
+    function() CurrentGoldDeathUpgrade = CurrentGoldDeathUpgrade + 1 end)
+registerResearch('R011', " has researched Drawstring Pouches! (Reduces gold loss penalty for dying down to 10 percent.)",
+    function() CurrentGoldDeathUpgrade = 2 end)
+
+registerResearch('R00H', " has researched Energy Rush (Energy Regeneration +1)",
+    function() EnergyRegenTotal = EnergyRegenTotal + 1 end)
+
+-- Item-drop pacing: LOWER ItemDropTotal = more frequent drops (items.lua kill counter).
+registerResearch('R010', " has researched Scavenging! (Items drop approximately 10 percent more often.)",
+    function() ItemDropTotal = ItemDropTotal - 5 end)
+registerResearch('R01F', " has researched Relic Analysis! slight increase to rare drops",
+    function() ItemDropTotal = ItemDropTotal - 7 end)
+
+registerResearch('R016', " has researched Locksmithing (Treasure Chests are no longer trapped.)",
+    function() Locksmithing = 10 end)
+
+-- Militia of Vern (R00W): destroyed town buildings spill 1-3 militia (Militia_Appear).
+local militiaT = nil
+registerResearch('R00W', " has researched Militia of Vern! (Militia appear at destroyed buildings.)",
+    function()
+        if militiaT then return end
+        militiaT = OnPlayerUnit(Player(8), EVENT_PLAYER_UNIT_DEATH, function()
+            local d = GetDyingUnit()
+            return IsUnitType(d, UNIT_TYPE_STRUCTURE) and GetUnitTypeId(d) ~= FourCC('h000')
+        end, function()
+            local d = GetDyingUnit()
+            CreateNUnitsAtLoc(GetRandomInt(1, 3), FourCC('h045'), Player(8),
+                GetUnitLoc(d), bj_UNIT_FACING)
+        end)
+    end)
+
+-- Strength of Unity (R00Z): the lowest-level player hero gains a level + A055 (+100 HP).
+registerResearch('R00Z', " has researched Strength of Unity! (Lowest Level hero on the team gains a level and 100 HP.)",
+    function()
+        local lowest = nil
+        for i = 1, 8 do
+            local h = Heroes[i]
+            if h and GetUnitTypeId(h) ~= 0
+                and (not lowest or GetHeroLevel(h) < GetHeroLevel(lowest)) then
+                lowest = h
+            end
+        end
+        if lowest then
+            SetHeroLevelBJ(lowest, GetHeroLevel(lowest) + 1, true)
+            UnitAddAbility(lowest, FourCC('A055'))
+        end
+    end)
+
+-- Reinforcement researches: champion militia + young heroes rise at Vern.
+registerResearch('R00P', " has researched Unlikely Heroes! (Four Champion Militia and a Young Hero will rise to Vern's Aid.)",
+    function()
+        CreateUnit(Player(8), FourCC('h04B'), GetRectCenterX(rct.YoungHeroSpawn), GetRectCenterY(rct.YoungHeroSpawn), 90.0)
+        CreateNUnitsAtLoc(4, FourCC('h04A'), Player(8), GetRectCenter(rct.YoungHeroMiliSpawn), 90.0)
+    end)
+registerResearch('R02M', " has researched Crew of Adventurers! (3 Young Heros will rise to Vern's Aid.)",
+    function()
+        CreateNUnitsAtLoc(3, FourCC('h04B'), Player(8), GetRectCenter(rct.YoungHeroSpawn), 90.0)
+    end)
+
+-- Botanist Prodigy (R01A): the Flower Seller becomes a Master Botanist; +2500 gold.
+registerResearch('R01A', " has researched Botanist Prodigy! (The Flower Seller becomes a Master Botanist and becomes invulnerable.)",
+    function(researcher)
+        if unit_n00H and GetUnitTypeId(unit_n00H) ~= 0 then
+            unit_n00H = ReplaceUnitBJ(unit_n00H, FourCC('n00W'), bj_UNIT_STATE_METHOD_RELATIVE)
+        end
+        AdjustPlayerStateBJ(2500, GetOwningPlayer(researcher), PLAYER_STATE_RESOURCE_GOLD)
+    end)
+
+-- Caravaneers (R02J): mass-sell caravan post n014 appears (Supply Stocking synergy).
+registerResearch('R02J', " has researched Caravaneers! |cff00ff00(Can quickly mass-sell items from Supply Stocking.)|r",
+    function()
+        CreateUnit(Player(PLAYER_NEUTRAL_PASSIVE), FourCC('n014'),
+            GetRectCenterX(rct.Caravaneers), GetRectCenterY(rct.Caravaneers), bj_UNIT_FACING)
+    end)
+
 -- Rebuildable Towers (R00E, war3map.j 24852-24873) — arms the tower-rebuild pair: destroyed
 -- guard towers leave pads that sell the rebuild unit.
 registerResearch('R00E',
