@@ -194,6 +194,14 @@ EnergyRegenTotal        = 1
 ExplosiveGrowthTotal    = 25
 TotalMysticTowerAllowed = 5
 EngineerMaxBuildings    = 5
+-- Human Engineer tech-unlock ranks (abilities.lua / progression/Training.md)
+ConstructionResearch    = 0
+SchematicsResearch      = 0
+MarvelResearch          = 0
+EngineerPlayer          = nil
+-- Earthen Templar — Earthen Presence proc state (abilities.lua)
+EarthenPresence         = 0   -- current rank (0 = unlearned)
+EarthenChance           = 0   -- last proc roll (1-50)
 CentaurTreantTotal      = 2
 AidAnotherTimer         = 5.0
 SofUnityLowestLevel     = 100

@@ -85,6 +85,9 @@ RegisterCameraTriggers()
 -- Register the "-adomach" final-boss command (unlocked by Level 31 victory; bosses/Bosses.md §2)
 RegisterAdomachTrigger()
 
+-- Register per-hero class abilities (Phase 7; combat/Abilities.md) — Earthen Templar, Engineer, …
+RegisterAbilityTriggers()
+
 -- Register developer debug/cheat chat commands (gated by -debug)
 RegisterDebugCommands()
 
