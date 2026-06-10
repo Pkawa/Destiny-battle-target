@@ -3,9 +3,10 @@
 -- Source lines: war3map.j 5274-6031 (blues_patrol, UH_Patrol_Copy circuit, heal_self,
 --   Heal_Nearby_Hero, Town_Attacked, Basic_AI_Go_Heal).
 --
--- Ported subset: movement (patrol circuit + periodic push) and combat help (self-heal,
--- heal nearby player heroes, defend the town). Deferred: the research/build chain,
--- item auto-discard, and prince protection (secondary; backfill when those systems land).
+-- Ported: movement (patrol circuit + periodic push), combat help (self-heal, heal nearby
+-- player heroes, defend the town), and prince protection (rush to Silmeria when she fights).
+-- Deferred: the research/build chain (now optional — research buildings are pre-placed) and
+-- item auto-discard.
 
 local P1 = Player(1)
 
@@ -125,5 +126,29 @@ function RegisterCompanionAI()
     end))
     TriggerAddAction(gh, function()
         orderCompanion("move", rct.FrontOfFountain)
+    end)
+
+    -- ── princes_is_attacked: when Princess Silmeria (H02G) is fighting (an enemy reached
+    --    her, so she swung back), the companion teleports to her side and the routine AI
+    --    pauses for 250s while he guards her (war3map.j princes_is_attacked 5781-5815). ──
+    local pp = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(pp, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(pp, Condition(function()
+        return unit_H02G ~= nil and GetAttacker() == unit_H02G
+    end))
+    TriggerAddAction(pp, function()
+        DisableTrigger(pp); DisableTrigger(bp); DisableTrigger(ta); DisableTrigger(gh)
+        DefendingSilmeria = true
+        local px, py = GetUnitX(unit_H02G), GetUnitY(unit_H02G)
+        local g = companionGroup()
+        ForGroup(g, function() SetUnitPosition(GetEnumUnit(), px, py) end)
+        DestroyGroup(g)
+        if Heroes[2] then
+            TransmissionFromUnitWithNameBJ(GetPlayersAll(), Heroes[2], "Sir Joshua", nil,
+                "Protect the Princess!", bj_TIMETYPE_SET, 5.0, true)
+        end
+        TriggerSleepAction(250.0)
+        DefendingSilmeria = false
+        EnableTrigger(pp); EnableTrigger(bp); EnableTrigger(ta); EnableTrigger(gh)
     end)
 end

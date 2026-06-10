@@ -192,7 +192,108 @@ local function RegisterHeroDeathCries()
     end)
 end
 
+-- Per-player kill scoring — war3map.j 27352-27530 (P1-P8 Kill Score). The 8 near-identical
+-- per-player triggers collapse into one: on any unit death, credit the killer's owner.
+local function registerKillScoring()
+    local t = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddAction(t, function()
+        local killer = GetKillingUnit()
+        if not killer then return end
+        local pid = GetPlayerId(GetOwningPlayer(killer))
+        if pid >= 0 and pid <= 7 then
+            Kills[pid + 1] = Kills[pid + 1] + 1
+        end
+    end)
+end
+
+-- Midas' Touch — war3map.j 31669-31820. A cursed item (I095) costs its holder 10 gold per
+-- kill until their gold reaches 1500, at which point it "purifies" into the Blessing (I096):
+-- +20 gold per kill. Dropping either item detaches it (attune to Player(10) so kills stop
+-- crediting anyone). State lives in MidasTouchPlayer / MidasHero / MidasPurifiedAlready.
+local function registerMidas()
+    local I095, I096 = FourCC('I095'), FourCC('I096')
+    local creditsHolder = function()
+        local k = GetKillingUnit()
+        return k ~= nil and GetOwningPlayer(k) == MidasTouchPlayer
+    end
+
+    -- Curse + Blessing both fire on a kill by the holder; only one is enabled at a time.
+    local curse, blessing
+    curse = CreateTrigger()
+    DisableTrigger(curse)
+    TriggerRegisterAnyUnitEventBJ(curse, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(curse, Condition(creditsHolder))
+    TriggerAddAction(curse, function()
+        AdjustPlayerStateBJ(-10, MidasTouchPlayer, PLAYER_STATE_RESOURCE_GOLD)
+        TriggerSleepAction(GetRandomReal(1.0, 3.0))
+        if GetPlayerState(MidasTouchPlayer, PLAYER_STATE_RESOURCE_GOLD) >= 1500
+            and not MidasPurifiedAlready then
+            DisplayTextToForce(GetForceOfPlayer(MidasTouchPlayer),
+                "|cffCD2600You have broken the Curse of the Midas' Touch!!|r")
+            MidasPurifiedAlready = true
+            if MidasHero then
+                RemoveItem(GetItemOfTypeFromUnitBJ(MidasHero, I095))
+                PlaySoundOnUnitBJ(snd.DivineShield, 100, MidasHero)
+                UnitAddItemByIdSwapped(I096, MidasHero)
+            end
+            DisableTrigger(curse)
+            EnableTrigger(blessing)
+        end
+    end)
+
+    blessing = CreateTrigger()
+    DisableTrigger(blessing)
+    TriggerRegisterAnyUnitEventBJ(blessing, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(blessing, Condition(creditsHolder))
+    TriggerAddAction(blessing, function()
+        AdjustPlayerStateBJ(20, MidasTouchPlayer, PLAYER_STATE_RESOURCE_GOLD)
+    end)
+
+    -- Pick up the cursed item -> attune + arm the curse.
+    local touch = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(touch, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(touch, Condition(function()
+        return not IsUnitIllusion(GetManipulatingUnit())
+            and GetItemTypeId(GetManipulatedItem()) == I095
+    end))
+    TriggerAddAction(touch, function()
+        MidasTouchPlayer = GetOwningPlayer(GetManipulatingUnit())
+        MidasHero = GetManipulatingUnit()
+        EnableTrigger(curse)
+    end)
+
+    -- Pick up the purified Blessing -> re-attune.
+    local equip = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(equip, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(equip, Condition(function()
+        return not IsUnitIllusion(GetManipulatingUnit())
+            and GetItemTypeId(GetManipulatedItem()) == I096
+    end))
+    TriggerAddAction(equip, function()
+        DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(GetManipulatingUnit())),
+            "The Midas' Touch is now attuned to you.")
+        MidasTouchPlayer = GetOwningPlayer(GetManipulatingUnit())
+    end)
+
+    -- Drop either item -> detach (attune to Player(10) so curse/blessing stop crediting anyone).
+    local unequip = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(unequip, EVENT_PLAYER_UNIT_DROP_ITEM)
+    TriggerAddCondition(unequip, Condition(function()
+        if IsUnitIllusion(GetManipulatingUnit()) then return false end
+        local id = GetItemTypeId(GetManipulatedItem())
+        return id == I095 or id == I096
+    end))
+    TriggerAddAction(unequip, function()
+        DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(GetManipulatingUnit())),
+            "The Midas' Touch is no longer attuned to you.")
+        MidasTouchPlayer = Player(10)
+    end)
+end
+
 function RegisterMiscTriggers()
     registerLevelUpFloaters()
     RegisterHeroDeathCries()
+    registerKillScoring()
+    registerMidas()
 end

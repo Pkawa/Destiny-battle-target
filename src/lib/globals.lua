@@ -139,10 +139,15 @@ Only1Paladin    = true
 Only1Solar      = true
 
 -- Player kill/score tracking
--- Per-player score tracking, 1-indexed (kill scoring system not yet ported).
+-- Per-player kill counts, 1-indexed (misc.lua registerKillScoring credits the killer's owner).
 Kills = {}; Score = {}; MoveCount = {}
 for i = 1, 8 do Kills[i] = 0; Score[i] = 0; MoveCount[i] = 0 end
 MostKills       = 0
+
+-- Midas' Touch item system (misc.lua registerMidas; items I095 cursed / I096 blessing).
+MidasTouchPlayer        = nil    -- current holder; set on pickup, reset to Player(10) on drop
+MidasHero               = nil    -- the unit carrying the Midas item
+MidasPurifiedAlready    = false  -- once the curse is broken (>=1500 gold) it stays blessed
 TotalBonusGold  = 0
 HighestLevel    = 0
 TotalPlaying    = 0
