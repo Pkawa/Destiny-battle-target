@@ -71,6 +71,9 @@ RegisterItemDropTriggers()
 -- Register boss drops (each level boss drops 1 random gear + 1 spell scroll)
 RegisterBossDropTriggers()
 
+-- Register set-item combining (hold all pieces -> combined item)
+RegisterSetTriggers()
+
 -- Register loot-box purchases (buy a box token from a base shop -> random pool item)
 RegisterPurchaseTriggers()
 
@@ -88,6 +91,9 @@ RegisterResearchTriggers()
 
 -- Register circle-scroll spell learning (use scroll -> learn spell, one at a time)
 RegisterScrollTriggers()
+
+-- Register discover areas / dungeons (7 zones, portals, flavor, boss-chest unlocks)
+RegisterDiscoverTriggers()
 
 -- Register misc/flavor systems (hero level-up floaters)
 RegisterMiscTriggers()

@@ -117,6 +117,64 @@ function RegisterBossDropTriggers()
     end)
 end
 
+-- ── Set items (war3map.j 32601-33430; items/Items.md) ──
+-- Picking up a set piece while holding ALL of that set's pieces consumes them and grants
+-- the combined item (the Golem set spawns a golem unit instead; its flavor transmission is
+-- omitted — cosmetic). Smithyworks may only be completed once. Recipes extracted from the
+-- 11 per-set JASS triggers into one PICKUP_ITEM dispatch.
+local SETS = {
+    { pieces = { 'I04B', 'I04D', 'I04E' }, give = 'I04C', name = "the Apprentice's Regalia set" },
+    { pieces = { 'I047', 'I048', 'I049' }, give = 'I04A', name = "the Bowman's Friend set" },
+    { pieces = { 'I043', 'I044', 'I045' }, give = 'I046', name = "the Squire's Arnament set" },
+    { pieces = { 'I0CA', 'I0CB', 'I0CD' }, give = 'I0CC', name = "the Leech set" },
+    { pieces = { 'I091', 'I092', 'I093' }, give = 'I094', name = "Don Para's Inquisitor set" },
+    { pieces = { 'I0A9', 'I0AA', 'I0AB' }, give = 'I0AC', name = "The Primal Fury set" },
+    { pieces = { 'I0B1', 'I0B2', 'I0B3' }, give = 'I0B4', name = "The Mists set" },
+    { pieces = { 'I05B', 'I05C' },         give = 'I05D', name = "the outrunner set" },
+    { pieces = { 'I05E', 'I05F' },         give = 'I05G', name = "the Phalynx Guard Set" },
+    { pieces = { 'I04X', 'I050' },         spawn = 'h04T', name = "the Golem Set" },
+    { pieces = { 'I0BB', 'I0BC' },         give = 'I0BD', name = "the Smithyworks Set", once = true },
+}
+local setByPiece = {}
+for _, s in ipairs(SETS) do
+    s.pieceIds = {}
+    for i, p in ipairs(s.pieces) do
+        local id = FourCC(p)
+        s.pieceIds[i] = id
+        setByPiece[id] = s
+    end
+    s.giveId = s.give and FourCC(s.give) or nil
+    s.spawnId = s.spawn and FourCC(s.spawn) or nil
+end
+
+function RegisterSetTriggers()
+    OnAnyUnit(EVENT_PLAYER_UNIT_PICKUP_ITEM, function()
+        return setByPiece[GetItemTypeId(GetManipulatedItem())] ~= nil
+    end, function()
+        local s = setByPiece[GetItemTypeId(GetManipulatedItem())]
+        local hero = GetManipulatingUnit()
+        TriggerSleepAction(1.0)
+        if s.done or GetUnitTypeId(hero) == 0 then return end
+        for _, id in ipairs(s.pieceIds) do
+            if not UnitHasItemOfTypeBJ(hero, id) then return end
+        end
+        for _, id in ipairs(s.pieceIds) do
+            RemoveItem(GetItemOfTypeFromUnitBJ(hero, id))
+        end
+        if s.giveId then UnitAddItemById(hero, s.giveId) end
+        if s.spawnId then
+            local a = math.rad(GetRandomReal(0.0, 360.0))
+            CreateUnit(GetOwningPlayer(hero), s.spawnId,
+                GetUnitX(hero) + 200.0 * math.cos(a), GetUnitY(hero) + 200.0 * math.sin(a),
+                bj_UNIT_FACING)
+        end
+        if s.once then s.done = true end
+        PlaySoundBJ(snd.RestorationPotion or snd.AllianceSound)
+        DisplayTextToForce(GetPlayersAll(), GetPlayerName(GetOwningPlayer(hero))
+            .. " |cff32cd32Has finished " .. s.name .. "!|r")
+    end)
+end
+
 -- ── Purchase loot-boxes (war3map.j 35016-35123) ──
 -- Players buy a token item from a base shop (e.g. n000 sells the Lv1 box 'I00N'); picking
 -- it up consumes it and grants a random item from the rarity pools straight to inventory.
