@@ -135,10 +135,23 @@ registerResearch('R01B',
 -- Tower HP upgrade (R00D) — the +300 applies automatically via the propagated WC3 upgrade.
 registerResearch('R00D', " has researched Reinforced Towers!  (+300 max HP to all guard towers!)")
 
--- Seafaring (R00Y) — unlocks the harbor ships. The ship-spawn system is not yet ported, so
--- this sets the flag + announces (progression/Training.md §3; misc/MidasShipsAndMisc.md ⬜).
+-- Seafaring (R00Y) — basic ships begin docking at Vern's Harbor (loop in misc.lua).
 registerResearch('R00Y', " has researched Seafaring! (Basic ships will begin to dock at Vern's Harbor.)",
-    function() SeafaringLv1 = true end)
+    function()
+        SeafaringLv1 = true
+        StartShipSpawns(1)
+    end)
+
+-- Improved Rudders (R015, war3map.j Improved_Rudders) — the tier-2 ship loop.
+registerResearch('R015', " has researched Improved Rudders (New ships shall begin to appear at Vern Harbor.)",
+    function()
+        SeafaringLv1 = true   -- rudders alone also get ships sailing
+        StartShipSpawns(2)
+    end)
+
+-- Harbor Expansionism (R017) — the extra harbor building plot is upgrade-driven; the
+-- propagation applies it (war3map.j Harbor_Expansionism).
+registerResearch('R017', " has researched Harbor Expansionism (An additional building plot has been constructed at the Harbor.)")
 
 -- Rebuildable Towers (R00E, war3map.j 24852-24873) — arms the tower-rebuild pair: destroyed
 -- guard towers leave pads that sell the rebuild unit.

@@ -86,6 +86,9 @@ RegisterSupplyStockingTriggers()
 -- Seafaring; researched at the per-player h00Z buildings — progression/Training.md)
 RegisterResearchTriggers()
 
+-- Register circle-scroll spell learning (use scroll -> learn spell, one at a time)
+RegisterScrollTriggers()
+
 -- Register misc/flavor systems (hero level-up floaters)
 RegisterMiscTriggers()
 

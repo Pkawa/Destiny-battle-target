@@ -318,9 +318,71 @@ function StartEnergyRegeneration()
     end)
 end
 
+-- ── Harbor ships (war3map.j 27111-27276) ──────────────────────────────────────
+-- Once Seafaring is researched, merchant ships sail in on a 240-360s loop: spawn at
+-- ShipSpawnStart → sail to the dock → 90s layover → sail to ShipLeaveA → out to
+-- ShipDespawn → removed. Improved Rudders (R015) starts the tier-2 ship loop.
+-- The Swallow (h06L, the players' own ship) is exempt from all waypoint triggers.
+local SHIP_TIERS = {
+    [1] = { FourCC('h049'), FourCC('h04F'), FourCC('h04G') },
+    [2] = { FourCC('h04H'), FourCC('h04K'), FourCC('h04G') },
+}
+local shipLoopOn = { false, false }
+
+local function isMerchantShip()
+    local u = GetEnteringUnit()
+    return GetOwningPlayer(u) == Player(8) and GetUnitTypeId(u) ~= FourCC('h06L')
+end
+
+local function randomIn(rect)
+    return GetRandomReal(GetRectMinX(rect), GetRectMaxX(rect)),
+           GetRandomReal(GetRectMinY(rect), GetRectMaxY(rect))
+end
+
+local function registerShipWaypoints()
+    OnEnterRect(rct.ShipSpawnStart, isMerchantShip, function()
+        local x, y = randomIn(rct.ShipDockArea)
+        IssuePointOrder(GetEnteringUnit(), "move", x, y)
+    end)
+    OnEnterRect(rct.ShipDockArea, isMerchantShip, function()
+        local ship = GetEnteringUnit()
+        TriggerSleepAction(90.0)   -- layover at the dock
+        if GetUnitTypeId(ship) ~= 0 then
+            local x, y = randomIn(rct.ShipLeaveA)
+            IssuePointOrder(ship, "move", x, y)
+        end
+    end)
+    OnEnterRect(rct.ShipLeaveA, isMerchantShip, function()
+        local x, y = randomIn(rct.ShipDespawn)
+        IssuePointOrder(GetEnteringUnit(), "move", x, y)
+    end)
+    OnEnterRect(rct.ShipDespawn, isMerchantShip, function()
+        RemoveUnit(GetEnteringUnit())
+    end)
+end
+
+-- Start a ship-spawn loop (tier 1 = Seafaring, tier 2 = Improved Rudders). Runs while
+-- SeafaringLv1 holds; each pass waits 240-360s then sails one random tier ship in.
+function StartShipSpawns(tier)
+    if shipLoopOn[tier] then return end
+    shipLoopOn[tier] = true
+    local t = CreateTrigger()
+    TriggerAddAction(t, function()
+        while SeafaringLv1 do
+            TriggerSleepAction(GetRandomReal(240.0, 360.0))
+            if not SeafaringLv1 then break end
+            CreateUnit(Player(8), SHIP_TIERS[tier][GetRandomInt(1, 3)],
+                GetRectCenterX(rct.ShipSpawnStart), GetRectCenterY(rct.ShipSpawnStart), 0.0)
+        end
+        shipLoopOn[tier] = false
+    end)
+    TriggerExecute(t)
+end
+
 function RegisterMiscTriggers()
     registerLevelUpFloaters()
     RegisterHeroDeathCries()
     registerKillScoring()
     registerMidas()
+    registerShipWaypoints()
 end
