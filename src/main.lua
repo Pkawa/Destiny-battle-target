@@ -6,8 +6,9 @@ require('lib')  -- loads lib/init.lua which requires all modules
 -- Initialize objects that need InitBlizzard to have run first
 InitGameGlobals()
 
--- Create all regions and sounds
+-- Create all regions, cameras and sounds
 CreateAllRegions()
+CreateCameras()
 InitSounds()
 
 -- Spawn the whole game world: town, hero taverns, feat shops, prince, enemies.
@@ -74,6 +75,9 @@ RegisterResearchTriggers()
 
 -- Register misc/flavor systems (hero level-up floaters)
 RegisterMiscTriggers()
+
+-- Register the "-camera" zoom-out command (systems/Cameras.md)
+RegisterCameraTriggers()
 
 -- Register developer debug/cheat chat commands (gated by -debug)
 RegisterDebugCommands()

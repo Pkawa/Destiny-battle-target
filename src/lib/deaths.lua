@@ -109,19 +109,62 @@ function RegisterHeroDeathTriggers()
         StartNearDefeatMusic()
     end)
 
-    -- ── Defeat: Princess Silmeria (objective, H02G) dies (war3map.j 29853, simplified — no cinematic yet) ──
+    -- ── Defeat: Princess Silmeria (H02G) dies → full cinematic (war3map.j Defeat_Silmeria 29841-29893) ──
     if unit_H02G then
         local df = CreateTrigger()
         TriggerRegisterUnitEvent(df, unit_H02G, EVENT_UNIT_DEATH)
         TriggerAddAction(df, function()
+            local sil = unit_H02G
+            local sx, sy = GetUnitX(sil), GetUnitY(sil)
+            local BLOOD = "Objects\\Spawnmodels\\Other\\HumanBloodCinematicEffect\\HumanBloodCinematicEffect.mdl"
+            local function applyCam(c, dur)
+                ForForce(GetPlayersAll(), function()
+                    CameraSetupApplyForPlayer(true, c, GetEnumPlayer(), dur)
+                end)
+            end
+            -- Keep her body in place (revived, invulnerable, 30 HP) so the cinematic plays on it.
+            ReviveHero(sil, sx, sy, false)
+            SetUnitLifeBJ(sil, 30.0)
+            SetUnitInvulnerable(sil, true)
+            PauseAllUnitsBJ(true)
             MusicOn = false; BossMusic = false; NearDefeatMusic = false
             StopAllMusic()
-            StopMusicBJ(false)
+            applyCam(cam.DefeatCamera, 0)
+            TriggerSleepAction(1.0)
+
+            AddSpecialEffectTargetUnitBJ("origin", sil, BLOOD)
             PlaySoundBJ(snd.GameOverToD)
-            PauseAllUnitsBJ(true)
+            TransmissionFromUnitWithNameBJ(GetPlayersAll(), sil, "Princess Silmeria", nil,
+                "I.. I wasn't strong enough..", bj_TIMETYPE_SET, 3.0, true)
+            TriggerSleepAction(3.0)
+
+            AddSpecialEffectTargetUnitBJ("chest", sil, BLOOD)
+            TransmissionFromUnitWithNameBJ(GetPlayersAll(), sil, "Princess Silmeria", nil,
+                "Everyone... Please forgive me. I... ...I....", bj_TIMETYPE_SET, 5.0, true)
+            TriggerSleepAction(3.0)
+
+            SetUnitAnimation(sil, "death")
+            AddSpecialEffectTargetUnitBJ("origin", sil, BLOOD)
+            applyCam(cam.DeadSil, 0)
+            TriggerSleepAction(1.0)
+            applyCam(cam.DeadSilZoomOut, 8.0)
+
+            -- Fade to black, then the closing narration (war3map.j 29877-29885).
+            CinematicFilterGenericBJ(8.0, BLEND_MODE_BLEND,
+                "ReplaceableTextures\\CameraMasks\\Black_mask.blp",
+                100, 100, 100, 100, 0, 0, 0, 0.0)
+            DisplayCineFilterBJ(true)
+            TriggerSleepAction(3.0)
             DisplayTextToForce(GetPlayersAll(),
-                "|cffff0000DEFEAT — Princess Silmeria has fallen. The town is lost.|r")
-            -- TODO: full defeat cinematic (Defeat_Camera/Dead_Sil cameras + Credits) — deferred
+                "|cffff0000Her death marked the end for all hopes and dreams...|r")
+            TriggerSleepAction(4.0)
+            DisplayTextToForce(GetPlayersAll(),
+                "|cffff0000Like a twisted plague, Adomach's army swept across the world. Demoralized at the loss of their beloved princess, the last remnants of Vern's resistance crumbled within the month.|r")
+            TriggerSleepAction(6.0)
+            DisplayTextToForce(GetPlayersAll(),
+                "|cffff0000In the end, Adomach's hold of the world grew strong. Tragedy and despair was all the world would know, evermore..|r")
+            TriggerSleepAction(4.0)
+            -- The credits roll (gg_trg_Credits) is a separate ⬜ system; the cinematic ends here.
         end)
     end
 end
