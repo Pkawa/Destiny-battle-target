@@ -172,7 +172,7 @@ function RegisterDebugCommands()
 
     -- ── encounters ──
     cmd("-defeat", true, gated(function()
-        if unit_H02G then KillUnit(unit_H02G) else tell(GetTriggerPlayer(), "[debug] Prince not found") end
+        if unit_H02G then KillUnit(unit_H02G) else tell(GetTriggerPlayer(), "[debug] Princess Silmeria not found") end
     end))
     cmd("-megaboss", true, gated(function()
         tell(GetTriggerPlayer(), "[debug] Megaboss (Level 20) not yet ported — placeholder.")

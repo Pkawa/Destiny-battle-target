@@ -245,6 +245,7 @@ WildbondRandomNum = 0
 BeastTrainingRank = 0
 
 -- Adomach boss
+AdomachUnlocked         = false  -- set true by Level 31 victory; gates the -adomach command (Bosses port pending)
 AdomachHimself          = nil
 AdomachBlinkTarget      = 0
 AdomachCurrentLocation  = 0

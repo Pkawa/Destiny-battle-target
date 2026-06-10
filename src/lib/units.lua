@@ -306,10 +306,29 @@ function CreateUnitsForPlayer12()
     u(p12, 'h05C', 20646.6,  4247.5, 181.3)
 end
 
+-- Per-player research buildings: each player slot 0-7 owns one h00Z (where players pick
+-- research — Training XP, tower/town upgrades, Princess upgrades; see lib/research.lua) plus
+-- an h02W structure. war3map.j CreateBuildingsForPlayer0..7 (3803-3896). In the original the
+-- blue AI constructs these over time; per design they are pre-placed.
+local H00Z_POS = {
+    [0] = { 2048.0, -2304.0 }, [1] = { 2560.0, -2304.0 },
+    [2] = { 3072.0, -2304.0 }, [3] = { 3584.0, -2304.0 },
+    [4] = { 2048.0, -2944.0 }, [5] = { 2560.0, -2944.0 },
+    [6] = { 3072.0, -2944.0 }, [7] = { 3584.0, -2944.0 },
+}
+function CreateResearchBuildings()
+    for i = 0, 7 do
+        local pos = H00Z_POS[i]
+        u(Player(i), 'h00Z', pos[1], pos[2], 270.0)
+        u(Player(i), 'h02W', -1920.0 + 384.0 * i, -4928.0, 270.0)
+    end
+end
+
 function CreateAllUnits()
     CreateNeutralPassiveBuildings()
     CreateNeutralPassive()
     CreateBuildingsForPlayer8()
+    CreateResearchBuildings()   -- per-player h00Z research buildings (war3map.j 3803-3896)
     CreateUnitsForPlayer8()
     CreateUnitsForPlayer9()
     CreateUnitsForPlayer11()

@@ -68,6 +68,10 @@ RegisterSellTriggers()
 RegisterItemShopTriggers()
 RegisterSupplyStockingTriggers()
 
+-- Register the research-upgrade dispatch (Training XP, Princess upgrades, tower upgrades,
+-- Seafaring; researched at the per-player h00Z buildings — progression/Training.md)
+RegisterResearchTriggers()
+
 -- Register misc/flavor systems (hero level-up floaters)
 RegisterMiscTriggers()
 

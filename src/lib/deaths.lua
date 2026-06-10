@@ -109,7 +109,7 @@ function RegisterHeroDeathTriggers()
         StartNearDefeatMusic()
     end)
 
-    -- ── Defeat: the Prince (objective) dies (war3map.j 29853, simplified — no cinematic yet) ──
+    -- ── Defeat: Princess Silmeria (objective, H02G) dies (war3map.j 29853, simplified — no cinematic yet) ──
     if unit_H02G then
         local df = CreateTrigger()
         TriggerRegisterUnitEvent(df, unit_H02G, EVENT_UNIT_DEATH)
@@ -120,7 +120,7 @@ function RegisterHeroDeathTriggers()
             PlaySoundBJ(snd.GameOverToD)
             PauseAllUnitsBJ(true)
             DisplayTextToForce(GetPlayersAll(),
-                "|cffff0000DEFEAT — the Prince has fallen. The town is lost.|r")
+                "|cffff0000DEFEAT — Princess Silmeria has fallen. The town is lost.|r")
             -- TODO: full defeat cinematic (Defeat_Camera/Dead_Sil cameras + Credits) — deferred
         end)
     end

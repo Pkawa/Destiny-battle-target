@@ -181,9 +181,9 @@ function BonusesAndUpkeep(levelIndex)
         awardAll(200, "|cff00ff00Plant Hater!|r Cleansed the plant scourge — |cffffcc00+200 Gold|r each.")
         PlantHater = false
     end
-    -- Prince is in danger: HP ≤ 150 (war3map.j 6954-6961)
+    -- Princess Silmeria (H02G) is in danger: HP ≤ 150 (war3map.j 6954-6961)
     if unit_H02G and GetUnitStateSwap(UNIT_STATE_LIFE, unit_H02G) <= 150.0 then
-        awardAll(10, "|cffff8800Prince is in danger! — |cffffcc00+10 Gold|r each.")
+        awardAll(10, "|cffff8800Princess Silmeria is in danger! — |cffffcc00+10 Gold|r each.")
     end
 
     -- ── Level challenge bonus (already armed in StartLevel) ───────────────────
@@ -1153,8 +1153,8 @@ local function spawnLevel(data)
     end
 end
 
-local function patrolEnemiesToBase()
-    local loc = GetRectCenter(rct.StartingPlayerArea)
+local function patrolEnemiesToBase(rectKey)
+    local loc = GetRectCenter(rct[rectKey or 'StartingPlayerArea'])
     local grp = GetUnitsInRectOfPlayer(GetPlayableMapRect(), P9)
     ForGroup(grp, function()
         IssuePointOrderLoc(GetEnumUnit(), "patrol", loc)
@@ -1184,6 +1184,201 @@ local function spawnPrisoners()
     DestroyGroup(grp)
 end
 
+-- ─── Level 30-31: the boss climax (war3map.j 24037-24411) ──────────────────────
+
+-- Level 30 boss: "The Hive Mastermind" / King of Spiders (O00U), level 6*DM.
+-- Four reactive AIs escalate as it loses HP (war3map.j 24132-24307):
+--   • Leech  — every 24s, drains a nearby enemy hero ("drain").
+--   • Pound  — when meleed (attacker within 300), shockwaves a hero; 12s internal cd.
+--   • Web Spray + Call Hive — below 7500 HP: war-stomp stun, then summon a hive.
+--   • (again) below 4000 HP.
+-- After every cast the boss patrols back to the fortress entrance. All AIs carry a
+-- generation guard so they self-disable when the level changes (see setupLevel20).
+local function setupLevel30()
+    local gen  = levelGen
+    local O00U = FourCC('O00U')
+    local FX   = GetRectCenterX(rct.EntranceToFortress)
+    local FY   = GetRectCenterY(rct.EntranceToFortress)
+    StartBossMusic()   -- BossMusic1 (war3map.j 24058-24060: udg_BossMusic + Boss_Music)
+
+    local function boss()
+        local g = GetUnitsOfTypeIdAll(O00U)
+        local b = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        return b
+    end
+    local function repatrol(b)
+        if b and GetUnitTypeId(b) ~= 0 then IssuePointOrder(b, "patrol", FX, FY) end
+    end
+    -- A random enemy unit within `range` of the boss (heroOnly restricts to heroes).
+    local function pickNear(b, range, heroOnly)
+        local g = CreateGroup()
+        GroupEnumUnitsInRange(g, GetUnitX(b), GetUnitY(b), range, Condition(function()
+            local f = GetFilterUnit()
+            return GetOwningPlayer(f) ~= P9 and (not heroOnly or IsUnitType(f, UNIT_TYPE_HERO))
+        end))
+        local t = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        return t
+    end
+
+    -- configure the boss (war3map.j 24046-24048, 24072)
+    local grp = GetUnitsOfTypeIdAll(O00U)
+    ForGroup(grp, function()
+        SetHeroLevelBJ(GetEnumUnit(), math.max(1, 6 * DifficultyModifier), false)
+    end)
+    DestroyGroup(grp)
+
+    -- Leech (every 24s): drain a nearby enemy hero (war3map.j 24151-24159)
+    local leech = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(leech, 24.0)
+    TriggerAddAction(leech, function()
+        if levelGen ~= gen then DisableTrigger(leech); return end
+        local b = boss(); if not b then return end
+        FloatText(b, "Leech", 100, 100, 100, 3.0)
+        local tgt = pickNear(b, 490.0, true)
+        if tgt then IssueTargetOrderBJ(b, "drain", tgt) end
+        After(4.5, function() if levelGen == gen then repatrol(boss()) end end)
+    end)
+
+    -- Pound (on melee attack): shockwave a nearby hero, then a 12s internal cooldown
+    -- (war3map.j 24174-24211).
+    local pound = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(pound, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(pound, Condition(function()
+        local u, a = GetAttackedUnitBJ(), GetAttacker()
+        if GetUnitTypeId(u) ~= O00U then return false end
+        local dx, dy = GetUnitX(u) - GetUnitX(a), GetUnitY(u) - GetUnitY(a)
+        return dx * dx + dy * dy <= 300.0 * 300.0
+    end))
+    TriggerAddAction(pound, function()
+        if levelGen ~= gen then DisableTrigger(pound); return end
+        DisableTrigger(pound)
+        local b = boss(); if not b then return end
+        FloatText(b, "Pound", 100, 100, 100, 3.0)
+        local tgt = pickNear(b, 500.0, true)
+        if tgt then IssuePointOrder(b, "shockwave", GetUnitX(tgt), GetUnitY(tgt)) end
+        After(4.0,  function() if levelGen == gen then repatrol(boss()) end end)
+        After(12.0, function() if levelGen == gen then EnableTrigger(pound) end end)
+    end)
+
+    -- Web Spray + Call Hive: war-stomp stun, then summon a hive near the boss after `gap`s.
+    local function castHive(b, gap)
+        FloatText(b, "Web Spray", 100, 100, 100, 3.0)
+        IssueImmediateOrder(b, "stomp")
+        After(gap, function()
+            if levelGen ~= gen then return end
+            local bb = boss(); if not bb then return end
+            local ang = math.rad(GetRandomReal(0.0, 360.0))
+            local d   = GetRandomReal(100.0, 300.0)
+            IssuePointOrder(bb, "summonfactory",
+                GetUnitX(bb) + d * math.cos(ang), GetUnitY(bb) + d * math.sin(ang))
+            FloatText(bb, "Call Hive", 100, 100, 100, 3.0)
+            After(1.5, function() if levelGen == gen then repatrol(boss()) end end)
+        end)
+    end
+
+    -- Second stage (≤4000 HP), armed by the first (war3map.j 24273-24298).
+    local web2 = CreateTrigger()
+    DisableTrigger(web2)
+    TriggerRegisterPlayerUnitEventSimple(web2, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(web2, Condition(function()
+        local u = GetAttackedUnitBJ()
+        return GetUnitTypeId(u) == O00U and GetUnitState(u, UNIT_STATE_LIFE) <= 4000.0
+    end))
+    TriggerAddAction(web2, function()
+        if levelGen ~= gen then DisableTrigger(web2); return end
+        DisableTrigger(web2)
+        local b = boss(); if b then castHive(b, 1.5) end
+    end)
+
+    -- First stage (≤7500 HP) (war3map.j 24227-24257).
+    local web1 = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(web1, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(web1, Condition(function()
+        local u = GetAttackedUnitBJ()
+        return GetUnitTypeId(u) == O00U and GetUnitState(u, UNIT_STATE_LIFE) <= 7500.0
+    end))
+    TriggerAddAction(web1, function()
+        if levelGen ~= gen then DisableTrigger(web1); return end
+        DisableTrigger(web1)
+        local b = boss(); if b then castHive(b, 2.0) end
+        EnableTrigger(web2)
+    end)
+end
+
+-- Level 31: the final boss "Boss of the Pit" (N015), level 6*DM, plus a heavy wave.
+-- The original gives N015 no scripted AI — it fights with its own object-data abilities
+-- (war3map.j 24310-24369). Victory unlocks the optional Adomach boss (Bosses ⬜).
+local function setupLevel31()
+    StartBossMusic()   -- BossMusic1 (war3map.j 24326-24328)
+    local grp = GetUnitsOfTypeIdAll(FourCC('N015'))
+    ForGroup(grp, function()
+        SetHeroLevelBJ(GetEnumUnit(), math.max(1, 6 * DifficultyModifier), false)
+    end)
+    DestroyGroup(grp)
+end
+
+-- ── Wire setup hooks defined after the LevelData literal ───────────────────────
+-- These hooks live below the LevelData table (they need `levelGen`, declared after it),
+-- so a `setup = setupLevelNN` written inside the table literal captured nil (Lua evaluates
+-- table values eagerly, before the function exists) and the hook silently never ran.
+-- Bind them here, after definition, so they actually fire in StartLevel. (Levels 6/8/10
+-- are unaffected — defined above the table; [28] wraps its call in an inline closure.)
+LevelData[13].setup = setupLevel13
+LevelData[14].setup = setupLevel14
+LevelData[16].setup = setupLevel16AI
+LevelData[17].setup = setupLevel16AI
+LevelData[18].setup = setupLevel18
+LevelData[19].setup = setupLevel19
+LevelData[20].setup = setupLevel20
+LevelData[21].setup = setupLevel21
+LevelData[26].setup = setupLevel26
+LevelData[29].setup = setupLevel29AI
+
+-- New boss levels (defined here so their setups, which need `levelGen`, resolve directly).
+LevelData[30] = {
+    intro = "Level 30 - The Hive Mastermind - |cffff0000Boss #5!!|r |cff32cd32Victory|r - Defeat of King of Spiders. |cffff0000Defeat|r - Death of Princess Silmeria",
+    next = 31, boss = true, patrolTo = 'EntranceToFortress',
+    spawns = {
+        { u=UID.SpeedWisp, n=1,       at=ABC },
+        { u=FourCC('h04M'), n=3, dm=1, at='B' },
+        { u=FourCC('h04N'), n=1, dm=1, at='B' },
+        { u=FourCC('h04V'), n=1, dm=1, at='B' },
+        { u=FourCC('h04W'), n=1, dm=1, at='B' },
+        { u=FourCC('O00U'), n=1,       at='B' },   -- boss: Lairlord Razormaw
+    },
+    victory = { type='boss', unit=FourCC('O00U') },
+    setup = setupLevel30,
+}
+
+LevelData[31] = {
+    intro = "Level 31 - Boss of the Pit and minions - |cffff0000Boss #6!!|r |cff32cd32Victory|r - Defeat of Boss of the Pit. |cffff0000Defeat|r - Death of Princess Silmeria",
+    boss = true, patrolTo = 'EntranceToFortress',   -- next = nil → terminal: onVictory runs the climax
+    spawns = {
+        { u=UID.SpeedWisp, n=1,       at=ABC },
+        { u=FourCC('h03T'), n=2, dm=1, at=ABC },
+        { u=FourCC('h03T'), n=1, dm=1, at='HellSpawn' },
+        { u=FourCC('h01R'), n=5, dm=1, at=ABC },
+        { u=FourCC('h01R'), n=3, dm=1, at='HellSpawn' },
+        { u=FourCC('h06Q'), n=3, dm=1, at=ABC },
+        { u=FourCC('h06Q'), n=1, dm=1, at='HellSpawn' },
+        { u=FourCC('h06P'), n=1, dm=1, at=ABC },
+        { u=FourCC('h06P'), n=0, dm=1, at='HellSpawn' },
+        { u=FourCC('h06R'), n=1,       at='HellSpawn' },
+        { u=FourCC('N015'), n=1,       at='B' },   -- final boss: Boss of the Pit
+    },
+    victory = { type='boss', unit=FourCC('N015') },
+    setup = setupLevel31,
+    onVictory = function()
+        -- Campaign climax (war3map.j 24385-24401).
+        DisplayTimedTextToForce(GetPlayersAll(), 10.0, "Boss of the Pit|r - |cff7777aaComplete!|r")
+        DisplayTextToForce(GetPlayersAll(), "|cff32cd32Victory!!|r the princess is saved!")
+        DisplayTimedTextToForce(GetPlayersAll(), 60.0, "type -adomach to spawn the bonus last boss")
+        AdomachUnlocked = true   -- optional post-game boss (Bosses ⬜); the -adomach command will read this
+    end,
+}
+
 -- forward declaration (global so onLevelVictory can chain)
 StartLevel = nil
 
@@ -1196,7 +1391,9 @@ local function onLevelVictory(data, levelIndex)
     PlaySoundBJ(snd.RoundClear)
     ThingsToDoImmediatelyFollowingVictory()
     SupplyStockingItems()  -- sort ground items into cleanup zones if researched (economy/Economy.md §3)
-    TimerForNextLevel(LevelData[data.next] and LevelData[data.next].boss or false)
+    if data.next and LevelData[data.next] then
+        TimerForNextLevel(LevelData[data.next].boss or false)
+    end
     TriggerSleepAction(0.25)
     DisplayTextToForce(GetPlayersAll(), "|cff00ff00Level " .. levelIndex .. " cleared!|r")
     TriggerSleepAction(0.25)
@@ -1215,6 +1412,8 @@ local function onLevelVictory(data, levelIndex)
     if data.next and LevelData[data.next] then
         CurrentLevel = data.next
         StartLevel(data.next)
+    elseif data.onVictory then
+        data.onVictory()   -- terminal level: run its climax instead of chaining onward
     else
         CurrentLevel = data.next or levelIndex
         DisplayTextToForce(GetPlayersAll(),
@@ -1331,7 +1530,7 @@ StartLevel = function(n)
     if data.setup then data.setup() end
 
     TriggerSleepAction(1.0)
-    if not data.noAutoPatrol then patrolEnemiesToBase() end
+    if not data.noAutoPatrol then patrolEnemiesToBase(data.patrolTo) end
     StartFastVictoriesTimer()
     MusicOn = true
     if data.track then CurrentTrackMusic = data.track end  -- nil = keep previous (e.g. L6 miniboss)
