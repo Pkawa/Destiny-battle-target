@@ -82,6 +82,9 @@ RegisterMiscTriggers()
 -- Register the "-camera" zoom-out command (systems/Cameras.md)
 RegisterCameraTriggers()
 
+-- Register the "-adomach" final-boss command (unlocked by Level 31 victory; bosses/Bosses.md §2)
+RegisterAdomachTrigger()
+
 -- Register developer debug/cheat chat commands (gated by -debug)
 RegisterDebugCommands()
 

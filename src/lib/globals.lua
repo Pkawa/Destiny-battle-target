@@ -251,7 +251,8 @@ WildbondRandomNum = 0
 BeastTrainingRank = 0
 
 -- Adomach boss
-AdomachUnlocked         = false  -- set true by Level 31 victory; gates the -adomach command (Bosses port pending)
+AdomachUnlocked         = false  -- set true by Level 31 victory; gates the -adomach command
+trg_Lv1ItemDrop         = nil    -- Lv1 kill-drop trigger handle (items.lua); Adomach suspends it
 AdomachHimself          = nil
 AdomachBlinkTarget      = 0
 AdomachCurrentLocation  = 0

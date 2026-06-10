@@ -44,6 +44,7 @@ end
 -- Lv_1_Item (war3map.j 34107) — enabled from the start (Lv_2_Item is for later levels).
 function RegisterItemDropTriggers()
     local t = CreateTrigger()
+    trg_Lv1ItemDrop = t   -- exposed so the Adomach fight can suspend kill-drops (adomach.lua)
     TriggerRegisterPlayerUnitEventSimple(t, Player(9), EVENT_PLAYER_UNIT_DEATH)
     TriggerAddCondition(t, Condition(function()
         local id = GetUnitTypeId(GetDyingUnit())
