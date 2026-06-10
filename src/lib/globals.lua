@@ -63,6 +63,7 @@ Level21Beaten           = false
 MegaBoss1Beaten         = false
 DarkOneBeaten           = false
 DarkOneWeakened         = false
+FleshmakerVar           = 0      -- Megaboss 1 Fleshmaker spell-rotation selector (megaboss.lua)
 LevelBonus              = 0
 LevelBonuses            = {}
 for i = 0, 30 do LevelBonuses[i] = false end

@@ -49,6 +49,13 @@ function InitSounds()
     SetSoundVolume(snd.RoundClear, 127)
     SetSoundPitch(snd.RoundClear, 1.0)
 
+    -- Dark One "exposed" cue (Megaboss 1, megaboss.lua)
+    snd.FacelessOneWhat1 = CreateSound("Units\\Creeps\\FacelessOne\\FacelessOneWhat1.wav", false, false, false, 10, 10, "DefaultEAXON")
+    SetSoundDuration(snd.FacelessOneWhat1, 1500)
+    SetSoundChannel(snd.FacelessOneWhat1, 0)
+    SetSoundVolume(snd.FacelessOneWhat1, 100)
+    SetSoundPitch(snd.FacelessOneWhat1, 1.0)
+
     snd.BotWFoundSFX = CreateSound("war3mapImported/BotW Found SFX.mp3", false, false, false, 0, 0, "DefaultEAXON")
     SetSoundDuration(snd.BotWFoundSFX, 3000)
     SetSoundChannel(snd.BotWFoundSFX, 0)

@@ -56,7 +56,7 @@ local HELP = {
     "-wave : next waves  |  -goto N : jump to level N  |  -kill : clear wave",
     "-lvl N : set hero level  |  -gold N : give gold  |  -tp : hero to cursor",
     "-item unc|rare|epic|arti , -mythic : spawn loot at your hero",
-    "-repick : re-pick hero+feat  |  -defeat : lose  |  -megaboss : (stub)",
+    "-repick : re-pick hero+feat  |  -defeat : lose  |  -megaboss : launch Megaboss 1",
 }
 
 function RegisterDebugCommands()
@@ -175,6 +175,7 @@ function RegisterDebugCommands()
         if unit_H02G then KillUnit(unit_H02G) else tell(GetTriggerPlayer(), "[debug] Princess Silmeria not found") end
     end))
     cmd("-megaboss", true, gated(function()
-        tell(GetTriggerPlayer(), "[debug] Megaboss (Level 20) not yet ported — placeholder.")
+        tell(GetTriggerPlayer(), "[debug] Launching Megaboss 1 (Dark One + Fleshmaker) arena...")
+        StartMegaboss1()
     end))
 end

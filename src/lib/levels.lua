@@ -638,7 +638,7 @@ local LevelData = {
     },
     [24] = {
         intro = "|cffff4400Level 24|r — The final wave before the Megaboss!",
-        track = 3, next = nil,  -- chains to Megaboss 1 (not yet ported)
+        track = 3, next = nil,  -- next=nil → onVictory runs Megaboss 1 (wired below), which → L26
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
@@ -1335,6 +1335,11 @@ LevelData[20].setup = setupLevel20
 LevelData[21].setup = setupLevel21
 LevelData[26].setup = setupLevel26
 LevelData[29].setup = setupLevel29AI
+
+-- Level 24 is terminal in the table (numbering skips 25); its victory launches the Megaboss 1
+-- arena encounter (lib/megaboss.lua), which on its own victory advances to Level 26. Wrapped in
+-- a closure so StartMegaboss1 resolves at runtime regardless of module require order.
+LevelData[24].onVictory = function() StartMegaboss1() end
 
 -- New boss levels (defined here so their setups, which need `levelGen`, resolve directly).
 LevelData[30] = {
