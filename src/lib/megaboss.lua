@@ -91,7 +91,9 @@ function StartMegaboss1()
     end)
     DestroyGroup(g)
 
-    DisplayTextToForce(GetPlayersAll(), "|cffff0000The Megaboss stirs in its lair...|r")
+    DisplayTextToForce(GetPlayersAll(),
+        "Chapter Finale - Dark One |cffff0000MEGABOSS #1!!!|r  Enemies: Dark One, Fleshmakers, Tentacles  "
+        .. "|cff32cd32Victory|r - Defeat the Dark One!  |cffff0000Defeat|r - Death of all players.")
     TriggerSleepAction(10.0)
 
     -- spawn the bosses + tentacles
@@ -105,8 +107,8 @@ function StartMegaboss1()
     if lvld then SetHeroLevelBJ(lvld, math.max(1, 6 * DifficultyModifier), false) end
     TriggerSleepAction(9.0)
 
-    -- release the heroes, shield the Dark One, announce the mechanic
-    DisplayTextToForce(GetPlayersAll(), "|cffff0000Slay the Fleshmakers to expose the Dark One!|r")
+    -- release the heroes, shield the Dark One (war3map.j 36608-36611)
+    DisplayTextToForce(GetPlayersAll(), "|cffff0000Megaboss 1 - Begin!|r")
     local g2 = CreateGroup()
     GroupEnumUnitsInRect(g2, rct.Megaboss1HeroStart, Condition(isArenaHero))
     ForGroup(g2, function() PauseUnit(GetEnumUnit(), false) end)
@@ -116,13 +118,24 @@ function StartMegaboss1()
 
     -- ── arm the encounter triggers (all stopped on victory) ──────────────────────
     local boundaryT, checkT, tentT, fleshT, victoryT
-    local orbBounceT, sprayDespawnT, orbTickT
+    local orbBounceT, sprayDespawnT, orbTickT, spellTagT
     local function stopAll()
         for _, t in ipairs({ boundaryT, checkT, tentT, fleshT,
-                             orbBounceT, sprayDespawnT, orbTickT }) do
+                             orbBounceT, sprayDespawnT, orbTickT, spellTagT }) do
             if t then DisableTrigger(t) end
         end
     end
+
+    -- Spell_Display (war3map.j 36966-36984): float the spell's name above a casting
+    -- Fleshmaker so players can react to drains/slows.
+    spellTagT = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(spellTagT, P9, EVENT_PLAYER_UNIT_SPELL_EFFECT)
+    TriggerAddCondition(spellTagT, Condition(function()
+        return GetUnitTypeId(GetSpellAbilityUnit()) == O006
+    end))
+    TriggerAddAction(spellTagT, function()
+        FloatText(GetSpellAbilityUnit(), GetAbilityName(GetSpellAbilityId()), 100, 0, 0, 4.0)
+    end)
 
     -- Boundary: enemy units leaving the arena die (war3map.j Leave_Fireball_Kill).
     boundaryT = CreateTrigger()
@@ -145,13 +158,13 @@ function StartMegaboss1()
         ForGroup(tg, function() KillUnit(GetEnumUnit()) end)
         DestroyGroup(tg)
         if snd.FacelessOneWhat1 then PlaySoundBJ(snd.FacelessOneWhat1) end
-        DisplayTimedTextToForce(GetPlayersAll(), 20.0, "|cff00ff00The Dark One is exposed! Strike now!|r")
+        DisplayTimedTextToForce(GetPlayersAll(), 20.0, "|cffff0000The Dark One is Vulnerable!|r")
         DarkOneWeakened = true
         local b = pickOf(O003); if b then SetUnitInvulnerable(b, false) end
         TriggerSleepAction(20.0)
         b = pickOf(O003); if b then SetUnitInvulnerable(b, true) end
         if not MegaBoss1Beaten then
-            DisplayTimedTextToForce(GetPlayersAll(), 4.0, "|cffff0000The Dark One shields itself again!|r")
+            DisplayTimedTextToForce(GetPlayersAll(), 4.0, "|cffff0000The Dark One rallies!|r")
             spawnFleshmakers()
             EnableTrigger(checkT)
         end
@@ -188,24 +201,146 @@ function StartMegaboss1()
         end
     end)
 
-    -- Dark One acid pressure (every 4s): mark a victim and splash acid damage around it.
-    -- Simplified — the original's full spiral Acid Spray + Acid_Orb_Movement subsystem is a
-    -- deferred refinement (bosses/Bosses.md §4); the boss still threatens during its window.
-    pulseT = CreateTrigger()
-    TriggerRegisterTimerEventPeriodic(pulseT, 4.0)
-    TriggerAddAction(pulseT, function()
-        local boss = pickOf(O003)
-        local victim = arenaTarget(true)
-        if not (boss and victim) then return end
-        DisplayTextToForce(GetPlayersAll(),
-            "|cffff0000The Dark One sets eyes on |r" .. GetPlayerName(GetOwningPlayer(victim)) .. "!")
-        ForUnitsInRange(GetUnitX(victim), GetUnitY(victim), 250.0, function()
+    -- ── The Dark One's Acid kit (war3map.j 37147-37391 + Dark_One_Spells 37001-37137) ──
+    -- Two support unit types do the contact damage via their object data: e00T "acid orb"
+    -- (roams the arena, bouncing off the borders) and e00U "acid spray" (flies outward,
+    -- despawning at the borders).
+
+    -- Acid_Orb_Movement: an orb entering a border rect turns +120° and moves on (the bounce).
+    orbBounceT = CreateTrigger()
+    for _, b in ipairs({ 'MegabossNorthBorder', 'MegabossSouthBorder',
+                         'MegabossWestBorder',  'MegabossEastBorder' }) do
+        TriggerRegisterEnterRectSimple(orbBounceT, rct[b])
+    end
+    TriggerAddCondition(orbBounceT, Condition(function()
+        return GetUnitTypeId(GetEnteringUnit()) == ACID_ORB
+    end))
+    TriggerAddAction(orbBounceT, function()
+        local orb = GetEnteringUnit()
+        SetUnitFacingTimed(orb, GetUnitFacing(orb) + 120.0, 1.0)
+        TriggerSleepAction(1.0)
+        if GetUnitTypeId(orb) ~= 0 then moveForward(orb, 600.0) end
+    end)
+
+    -- Remove_Acid: spray missiles despawn at the borders.
+    sprayDespawnT = CreateTrigger()
+    for _, b in ipairs({ 'MegabossNorthBorder', 'MegabossSouthBorder',
+                         'MegabossWestBorder',  'MegabossEastBorder' }) do
+        TriggerRegisterEnterRectSimple(sprayDespawnT, rct[b])
+    end
+    TriggerAddCondition(sprayDespawnT, Condition(function()
+        return GetUnitTypeId(GetEnteringUnit()) == ACID_SPRAY
+    end))
+    TriggerAddAction(sprayDespawnT, function() RemoveUnit(GetEnteringUnit()) end)
+
+    -- Acid_Orb_Movement2 (every 2s): every orb keeps roaming 900 along its facing.
+    orbTickT = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(orbTickT, 2.0)
+    TriggerAddAction(orbTickT, function()
+        local og = GetUnitsOfPlayerAndTypeId(P9, ACID_ORB)
+        ForGroup(og, function() moveForward(GetEnumUnit(), 900.0) end)
+        DestroyGroup(og)
+    end)
+
+    -- Acid_Surge: 7 flamestrike casts at the victim's (fresh) position, 1.5s apart; the
+    -- cast ability A09D is granted for each cast and removed afterwards (war3map.j 37291).
+    local function acidSurge(victim)
+        for _ = 1, 7 do
+            if MegaBoss1Beaten then break end
+            local b = pickOf(O003)
+            if not b then break end
+            UnitAddAbility(b, FLAMESTRIKE)
+            if victim and GetUnitTypeId(victim) ~= 0 then
+                IssuePointOrder(b, "flamestrike", GetUnitX(victim), GetUnitY(victim))
+            end
+            TriggerSleepAction(1.5)
+        end
+        local b = pickOf(O003)
+        if b then UnitRemoveAbility(b, FLAMESTRIKE) end
+    end
+
+    -- A random arena hero with ≥10 HP — the Surge victim filter (war3map.j 37027-37045).
+    local function surgeVictim()
+        local g = CreateGroup()
+        GroupEnumUnitsInRect(g, rct.Megaboss1EntireArea, Condition(function()
             local f = GetFilterUnit()
-            return GetOwningPlayer(f) ~= P9 and IsUnitType(f, UNIT_TYPE_HERO)
-        end, function()
-            UnitDamageTarget(boss, GetEnumUnit(), 75.0, false, false,
-                ATTACK_TYPE_NORMAL, DAMAGE_TYPE_ACID, WEAPON_TYPE_WHOKNOWS)
-        end)
+            return IsUnitType(f, UNIT_TYPE_HERO) and GetOwningPlayer(f) ~= P9
+                and GetUnitState(f, UNIT_STATE_LIFE) >= 10.0
+        end))
+        local u = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        return u
+    end
+
+    -- Dark_One_Spells: the self-repeating, HP-gated escalation loop. Each pass (skipping
+    -- steps while the boss is exposed/dead): always spawn a Greater Acid Orb → ≤80 percent
+    -- HP: Acid Spray (30-step spiral of e00U missiles) → ≤60 percent: Acid Surge → ≤40
+    -- percent: a second Surge. Step gaps 5/17/15/4s, then repeat (war3map.j 37093-37137).
+    local function rotationStep(threshold)
+        if DarkOneWeakened or MegaBoss1Beaten then return nil end
+        local b = pickOf(O003)
+        if not b then return nil end
+        local mx = GetUnitState(b, UNIT_STATE_MAX_LIFE)
+        if mx <= 0.0 or GetUnitState(b, UNIT_STATE_LIFE) / mx * 100.0 > threshold then
+            return nil
+        end
+        return b
+    end
+    local rotationT = CreateTrigger()
+    TriggerAddAction(rotationT, function()
+        while not MegaBoss1Beaten do
+            local b = rotationStep(100.0)
+            if b then   -- Greater Acid Orb: spawn a roamer at a random arena point
+                bossTag(b, "Greater Acid Orb")
+                local x = GetRandomReal(GetRectMinX(rct.Megaboss1EntireArea), GetRectMaxX(rct.Megaboss1EntireArea))
+                local y = GetRandomReal(GetRectMinY(rct.Megaboss1EntireArea), GetRectMaxY(rct.Megaboss1EntireArea))
+                local orb = CreateUnit(P9, ACID_ORB, x, y, GetRandomReal(0.0, 360.0))
+                moveForward(orb, 600.0)
+            end
+            TriggerSleepAction(5.0)
+
+            b = rotationStep(80.0)
+            if b then   -- Acid Spray: 30-step rotating spiral of outward missiles
+                bossTag(b, "Acid Spray")
+                for _ = 1, 30 do
+                    if MegaBoss1Beaten or GetUnitTypeId(b) == 0 then break end
+                    SetUnitFacingTimed(b, GetUnitFacing(b) + 10.0, 0)
+                    local a = math.rad(GetUnitFacing(b))
+                    local s = CreateUnit(P9, ACID_SPRAY,
+                        GetUnitX(b) + 225.0 * math.cos(a),
+                        GetUnitY(b) + 225.0 * math.sin(a), GetUnitFacing(b))
+                    moveForward(s, 1500.0)
+                    TriggerSleepAction(0.5)
+                end
+            end
+            TriggerSleepAction(17.0)
+
+            b = rotationStep(60.0)
+            if b then   -- Acid Surge on a marked hero
+                bossTag(b, "Acid Surge")
+                local victim = surgeVictim()
+                if victim then
+                    DisplayTextToForce(GetPlayersAll(),
+                        "|cffff0000The Dark One sets eyes on |r"
+                        .. GetPlayerName(GetOwningPlayer(victim)) .. "!")
+                    acidSurge(victim)
+                end
+            end
+            TriggerSleepAction(15.0)
+
+            b = rotationStep(40.0)
+            if b then   -- second Surge at low HP
+                bossTag(b, "Acid Surge")
+                local victim = surgeVictim()
+                if victim then
+                    DisplayTextToForce(GetPlayersAll(),
+                        "|cffff0000The Dark One sets eyes on |r"
+                        .. GetPlayerName(GetOwningPlayer(victim)) .. "!")
+                    acidSurge(victim)
+                end
+            end
+            TriggerSleepAction(4.0)
+        end
     end)
 
     -- Victory: the Dark One dies -> clear the arena, send heroes home, advance to Level 26
@@ -232,7 +367,8 @@ function StartMegaboss1()
         ToughBossMusic = false
         TriggerSleepAction(5.0)
         PlaySoundBJ(snd.RoundClear)
-        DisplayTimedTextToForce(GetPlayersAll(), 10.0, "|cff32cd32The Megaboss falls! The path is clear.|r")
+        DisplayTimedTextToForce(GetPlayersAll(), 10.0,
+            "|cffff0000Chapter 1 - Birth of Conflict|r - |cff7777aaComplete!|r")
         TriggerSleepAction(5.0)
         -- teleport survivors back to town
         local hg = CreateGroup()
@@ -250,4 +386,8 @@ function StartMegaboss1()
         BonusReset()
         StartLevel(26)
     end)
+
+    -- The Dark One's spell rotation begins 30s after the fight opens (war3map.j 36616-36617).
+    TriggerSleepAction(30.0)
+    if not MegaBoss1Beaten then TriggerExecute(rotationT) end
 end

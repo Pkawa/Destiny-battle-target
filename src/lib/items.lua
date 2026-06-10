@@ -77,6 +77,45 @@ function RegisterItemDropTriggers()
     end)
 end
 
+-- ── Boss drops (war3map.j 31906-32033; bosses/Bosses.md §1) ──
+-- Each level boss drops one random GEAR item + one random SPELL scroll at its corpse.
+-- The four per-boss JASS triggers collapse into one registry + one death dispatch.
+-- (Meldokk's spell table lists I08T twice in the original — it always drops I08T.)
+local BOSS_DROPS = {
+    [FourCC('H00C')] = {  -- Meldokk (Level 6 miniboss)
+        gear   = { FourCC('I075'), FourCC('I076'), FourCC('I074'), FourCC('I077') },
+        spells = { FourCC('I08T') },
+    },
+    [FourCC('O001')] = {  -- Goblin King (Level 10)
+        gear   = { FourCC('I0A4'), FourCC('I0A5'), FourCC('I0A6'), FourCC('I0A7') },
+        spells = { FourCC('I08V'), FourCC('I08U') },
+    },
+    [FourCC('O002')] = {  -- Tidedweller (Level 14)
+        gear   = { FourCC('I0AE'), FourCC('I0AD'), FourCC('I0AF') },
+        spells = { FourCC('I08W'), FourCC('I08X') },
+    },
+    [FourCC('O004')] = {  -- Gnasher / Undead Behemoth (Level 20)
+        gear   = { FourCC('I0C1'), FourCC('I0C2'), FourCC('I0C3') },
+        spells = { FourCC('I0C4'), FourCC('I0C5') },
+    },
+}
+
+function RegisterBossDropTriggers()
+    local t = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(t, Condition(function()
+        return BOSS_DROPS[GetUnitTypeId(GetDyingUnit())] ~= nil
+            and not IsUnitIllusion(GetDyingUnit())
+    end))
+    TriggerAddAction(t, function()
+        local u = GetDyingUnit()
+        local d = BOSS_DROPS[GetUnitTypeId(u)]
+        local x, y = GetUnitX(u), GetUnitY(u)
+        CreateItem(d.gear[GetRandomInt(1, #d.gear)], x, y)
+        CreateItem(d.spells[GetRandomInt(1, #d.spells)], x, y)
+    end)
+end
+
 -- ── Purchase loot-boxes (war3map.j 35016-35123) ──
 -- Players buy a token item from a base shop (e.g. n000 sells the Lv1 box 'I00N'); picking
 -- it up consumes it and grants a random item from the rarity pools straight to inventory.

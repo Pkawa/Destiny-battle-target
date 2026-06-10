@@ -58,6 +58,9 @@ RegisterHeroDeathTriggers()
 -- Register the loot drop system (enemies drop rarity-rolled Lv1 items on death)
 RegisterItemDropTriggers()
 
+-- Register boss drops (each level boss drops 1 random gear + 1 spell scroll)
+RegisterBossDropTriggers()
+
 -- Register loot-box purchases (buy a box token from a base shop -> random pool item)
 RegisterPurchaseTriggers()
 
