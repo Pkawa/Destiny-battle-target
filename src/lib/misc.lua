@@ -379,10 +379,61 @@ function StartShipSpawns(tier)
     TriggerExecute(t)
 end
 
+-- Radley the dog (war3map.j 29218-29264, 29267-29284, 33566-33578). The pup n011 idles at
+-- his hangout (far SW) until someone picks up the "Treats" item (I0BY); then he periodically
+-- pads over to whoever holds the treats, with a flavor line. Drop the treats and he goes home.
+local RADLEY_FLAVOR = {
+    "The pup wags his tail.",
+    "The dog paws at your trouser legs.",
+    "Puts his nose in the pouch you are holding.",
+}
+local radleyOwner = nil
+local function registerRadley()
+    local follow = CreateTrigger()
+    DisableTrigger(follow)
+    TriggerRegisterTimerEventPeriodic(follow, 120.0)
+    TriggerAddAction(follow, function()
+        if radleyOwner and unit_n011 then
+            IssueTargetOrder(unit_n011, "move", radleyOwner)
+            CreateTextTagUnitBJ(RADLEY_FLAVOR[GetRandomInt(1, 3)], unit_n011,
+                0, 8.0, 0.0, 100, 0.0, 0)
+            SetTextTagLifespanBJ(GetLastCreatedTextTag(), 5)
+        end
+    end)
+
+    local pick = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(pick, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(pick, Condition(function()
+        return GetItemTypeId(GetManipulatedItem()) == FourCC('I0BY')
+    end))
+    TriggerAddAction(pick, function()
+        radleyOwner = GetManipulatingUnit()
+        EnableTrigger(follow)
+        if unit_n011 and radleyOwner then
+            IssueTargetOrder(unit_n011, "move", radleyOwner)
+        end
+    end)
+
+    local drop = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(drop, EVENT_PLAYER_UNIT_DROP_ITEM)
+    TriggerAddCondition(drop, Condition(function()
+        return GetItemTypeId(GetManipulatedItem()) == FourCC('I0BY')
+    end))
+    TriggerAddAction(drop, function()
+        radleyOwner = nil
+        DisableTrigger(follow)
+        if unit_n011 then
+            IssuePointOrder(unit_n011, "move",
+                GetRectCenterX(rct.RadleyHangout), GetRectCenterY(rct.RadleyHangout))
+        end
+    end)
+end
+
 function RegisterMiscTriggers()
     registerLevelUpFloaters()
     RegisterHeroDeathCries()
     registerKillScoring()
     registerMidas()
     registerShipWaypoints()
+    registerRadley()
 end

@@ -71,6 +71,11 @@ RegisterItemDropTriggers()
 -- Register boss drops (each level boss drops 1 random gear + 1 spell scroll)
 RegisterBossDropTriggers()
 
+-- Register dungeon/treasure chest drops (kill the unlocked chest -> tiered loot + trap)
+-- and the four fixed world-unit drops (ice dragon, dire rat, etc.)
+RegisterChestTriggers()
+RegisterWorldDropTriggers()
+
 -- Register set-item combining (hold all pieces -> combined item)
 RegisterSetTriggers()
 

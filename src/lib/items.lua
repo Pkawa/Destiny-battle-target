@@ -37,6 +37,26 @@ local Lv1Artifact = pool{
     'I01M','I01U','I01Q','I024','I025','I063','I062','I06E','I07A','I07B',
 }
 
+-- Lv2 pools (war3map.j 35417-35520) — higher-tier loot, used by the Coral dungeon chest
+-- (h05G), the Lv2 boss/level drops, and the Lv2 loot-boxes (ported as those land).
+local Lv2Uncommon = pool{
+    'I02W','I02X','I02Y','I02Z','I030','I031','I032','I033','I034','I035',
+    'I036','I037','I09A','I08Y','I038','I07C','I07D','I07E','I04O','I07F',
+    'I07G','I07H','I07I','I07J','I07K','I090','I08Z','I09C','I09D','I09E','I09F',
+}
+local Lv2Rare = pool{
+    'I039','I03A','I03B','I03C','I03D','I03E','I03F','I03G','I03H','I03I',
+    'I092','I091','I093','I09Z','I09Y','I03X','I0AA','I0A9','I0AB','I0AJ',
+    'I0B3','I0B2','I0B1','I0A8','I0B6','I0B5','I03Y',
+}
+local Lv2Epic = pool{
+    'I03J','I03K','I03L','I03M','I03N','I03O','I03P','I0AK','I02R','I022',
+    'I050','I04X','I08K','I0B7','I0BA','I0BB','I0BC',
+}
+local Lv2Artifact = pool{
+    'I04I','I06D','I01M','I024',
+}
+
 local function drawFrom(p)
     return p[GetRandomInt(0, p.max)]
 end
@@ -75,6 +95,102 @@ function RegisterItemDropTriggers()
             PlaySoundBJ(snd.AllianceSound)
         end
         RemoveLocation(loc)
+    end)
+end
+
+-- ── Dungeon / Treasure chests (war3map.j 34602-34935; Dungeon Chest Level 0/1/2) ──
+-- Each dungeon's chest is invulnerable (Avul) until its boss dies — discover.lua removes
+-- Avul on the boss death. Destroying the now-vulnerable chest spills tiered loot and may
+-- spring a trap when the party's Locksmithing research is low:
+--   ChestTrap = rand(1,10) - Locksmithing; if >= 6 one of four traps fires.
+-- Loot per chest type (one item drawn from each listed pool):
+local CHEST_LOOT = {
+    [FourCC('h06I')] = { Lv1Rare, Lv1Rare, Lv1Uncommon, Lv1Uncommon, Lv1Uncommon }, -- Sewers / Treasure Cove
+    [FourCC('h056')] = { Lv1Rare, Lv1Rare, Lv1Epic, Lv1Epic, Lv1Artifact },          -- Outskirts
+    [FourCC('h05G')] = { Lv2Rare, Lv2Rare, Lv2Epic, Lv2Epic, Lv2Artifact },          -- Coral Cove
+}
+local CHEST_TRAP_SFX = {
+    "Abilities\\Spells\\Orc\\SpikeBarrier\\SpikeBarrier.mdl",
+    "Abilities\\Spells\\NightElf\\FanOfKnives\\FanOfKnivesCaster.mdl",
+    "Abilities\\Spells\\Human\\FlameStrike\\FlameStrike1.mdl",
+    "Abilities\\Spells\\Undead\\DeathPact\\DeathPactTarget.mdl",
+}
+local CHEST_TRAP_MSG = {
+    "TRAPPED! - Spike Trap", "TRAPPED! - Needle Trap",
+    "TRAPPED! - Self Destruct!!", "TRAPPED! - Mana Shear!",
+}
+
+local function chestTrapText(loc, msg)
+    CreateTextTagLocBJ(msg, loc, 0, 10, 100, 100, 100, 0)
+    SetTextTagPermanentBJ(GetLastCreatedTextTag(), false)
+    SetTextTagLifespanBJ(GetLastCreatedTextTag(), 5)
+end
+
+function RegisterChestTriggers()
+    local t = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(t, Condition(function()
+        return CHEST_LOOT[GetUnitTypeId(GetDyingUnit())] ~= nil
+    end))
+    TriggerAddAction(t, function()
+        local d = GetDyingUnit()
+        local loot = CHEST_LOOT[GetUnitTypeId(d)]
+        local loc = GetUnitLoc(d)
+        for _, p in ipairs(loot) do
+            CreateItemLoc(drawFrom(p), loc)
+        end
+        -- Locksmithing reduces the trap chance; <6 means the lock was picked safely.
+        if GetRandomInt(1, 10) - (Locksmithing or 0) < 6 then
+            RemoveLocation(loc)
+            return
+        end
+        local trap = GetRandomInt(1, 4)
+        chestTrapText(loc, CHEST_TRAP_MSG[trap])
+        if trap == 1 then  -- Spike Trap: 200 dmg in r225
+            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[1])
+            UnitDamagePointLoc(d, 0, 225.0, loc, 200.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
+            TriggerSleepAction(3.0)
+            DestroyEffect(sfx)
+        elseif trap == 2 then  -- Needle Trap: 100 dmg in r450
+            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[2])
+            UnitDamagePointLoc(d, 0, 450.0, loc, 100.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
+            TriggerSleepAction(3.0)
+            DestroyEffect(sfx)
+        elseif trap == 3 then  -- Self Destruct: delayed 500 dmg in r350
+            UnitDamagePointLoc(d, 5.0, 350.0, loc, 500.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
+            TriggerSleepAction(5.0)
+            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[3])
+            TriggerSleepAction(3.0)
+            DestroyEffect(sfx)
+        else  -- Mana Shear: drain the opener's mana
+            local killer = GetKillingUnitBJ()
+            if killer then SetUnitManaPercentBJ(killer, 0.0) end
+            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[4])
+            TriggerSleepAction(3.0)
+            DestroyEffect(sfx)
+        end
+        RemoveLocation(loc)
+    end)
+end
+
+-- Fixed single-item drops for four specific world units (war3map.j 2790-2920 +
+-- 4140-4189: Unit000180/278/299/300_DropItems). Each guarantees one item at the corpse.
+local WORLD_UNIT_DROPS = {
+    [FourCC('h039')] = FourCC('I0CG'),  -- southern overseer (22305,-4069)
+    [FourCC('h06H')] = FourCC('I0BV'),  -- Dire Rat / "gargantuan rat" (Vern Sewers boss)
+    [FourCC('h06K')] = FourCC('I0C0'),  -- (-409,-9183)
+    [FourCC('n016')] = FourCC('I0CE'),  -- Ice Dragon
+}
+function RegisterWorldDropTriggers()
+    local t = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(t, Condition(function()
+        return WORLD_UNIT_DROPS[GetUnitTypeId(GetDyingUnit())] ~= nil
+    end))
+    TriggerAddAction(t, function()
+        local d = GetDyingUnit()
+        if IsUnitHidden(d) then return end
+        CreateItem(WORLD_UNIT_DROPS[GetUnitTypeId(d)], GetUnitX(d), GetUnitY(d))
     end)
 end
 
