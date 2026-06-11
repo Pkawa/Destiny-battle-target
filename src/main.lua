@@ -74,6 +74,9 @@ RegisterBossDropTriggers()
 -- Register set-item combining (hold all pieces -> combined item)
 RegisterSetTriggers()
 
+-- Register Dojo stat training (buy from the Dojo -> stat boost for all heroes, one active)
+RegisterDojoTriggers()
+
 -- Register loot-box purchases (buy a box token from a base shop -> random pool item)
 RegisterPurchaseTriggers()
 

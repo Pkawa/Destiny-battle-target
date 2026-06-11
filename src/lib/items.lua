@@ -117,6 +117,67 @@ function RegisterBossDropTriggers()
     end)
 end
 
+-- ── Dojo stat training (war3map.j 9513-9812; progression/Training.md §1) ──
+-- Buying a training item from the Dojo gives ALL player heroes a permanent stat boost.
+-- Only ONE training can be active: buying a new one first reverts the previous
+-- (Turn_Off_Old_Training). The four near-identical SELL_ITEM triggers + the 4-branch
+-- revert collapse into one table.
+local DOJO = {
+    { item = 'I06U', flag = 'DojoStrLv1Active', str = 10, agi = 0,  int = 0,
+      on  = "|cff00ff00Strength training in the dojo has been activated.  All heroes gain 10 strength.|r",
+      off = "|cffff0000Strength training in the dojo has been deactivated.  All heroes lose 10 strength.|r" },
+    { item = 'I06V', flag = 'DojoAgiLv1Active', str = 0,  agi = 10, int = 0,
+      on  = "|cff00ff00Reflex training in the dojo has been activated.  All heroes gain 10 agility.|r",
+      off = "|cffff0000Reflex training in the dojo has been deactivated.  All heroes lose 10 agility.|r" },
+    { item = 'I06W', flag = 'DojoIntLv1Active', str = 0,  agi = 0,  int = 10,
+      on  = "|cff00ff00Focus training in the dojo has been activated.  All heroes gain 10 intelligence.|r",
+      off = "|cffff0000Focus training in the dojo has been deactivated.  All heroes lose 10 intelligence.|r" },
+    { item = 'I06X', flag = 'DojoAllLv1Active', str = 5,  agi = 5,  int = 5,
+      on  = "|cff00ff00Balanced training in the dojo has been activated.  All heroes gain 5 to all stats.|r",
+      off = "|cffff0000Balanced training in the dojo has been deactivated.  All heroes lose 5 to all stats.|r" },
+}
+local dojoByItem = {}
+for _, d in ipairs(DOJO) do dojoByItem[FourCC(d.item)] = d end
+
+-- Apply ±1× a training's stats to every player hero (heroes not owned by Player 9).
+local function dojoApply(d, sign)
+    local g = GetUnitsInRectMatching(GetPlayableMapRect(), Condition(function()
+        return IsUnitType(GetFilterUnit(), UNIT_TYPE_HERO)
+            and GetOwningPlayer(GetFilterUnit()) ~= Player(9)
+    end))
+    ForGroup(g, function()
+        local u = GetEnumUnit()
+        if d.str ~= 0 then ModifyHeroStat(bj_HEROSTAT_STR, u, bj_MODIFYMETHOD_ADD, sign * d.str) end
+        if d.agi ~= 0 then ModifyHeroStat(bj_HEROSTAT_AGI, u, bj_MODIFYMETHOD_ADD, sign * d.agi) end
+        if d.int ~= 0 then ModifyHeroStat(bj_HEROSTAT_INT, u, bj_MODIFYMETHOD_ADD, sign * d.int) end
+    end)
+    DestroyGroup(g)
+end
+
+local function turnOffOldTraining()
+    for _, d in ipairs(DOJO) do
+        if _G[d.flag] then
+            DisplayTextToForce(GetPlayersAll(), d.off)
+            dojoApply(d, -1)
+            _G[d.flag] = false
+        end
+    end
+end
+
+function RegisterDojoTriggers()
+    OnAnyUnit(EVENT_PLAYER_UNIT_SELL_ITEM, function()
+        return dojoByItem[GetItemTypeId(GetSoldItem())] ~= nil
+    end, function()
+        local d = dojoByItem[GetItemTypeId(GetSoldItem())]
+        RemoveItem(GetSoldItem())
+        turnOffOldTraining()
+        TriggerSleepAction(1.0)
+        dojoApply(d, 1)
+        _G[d.flag] = true
+        DisplayTextToForce(GetPlayersAll(), d.on)
+    end)
+end
+
 -- ── Set items (war3map.j 32601-33430; items/Items.md) ──
 -- Picking up a set piece while holding ALL of that set's pieces consumes them and grants
 -- the combined item (the Golem set spawns a golem unit instead; its flavor transmission is

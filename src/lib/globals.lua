@@ -206,6 +206,11 @@ EarthenChance           = 0   -- last proc roll (1-50)
 RogueDamageStacks       = 0   -- built every 2s while not attacking; discharged on attack
 RogueMaxDamageStacks    = 0   -- +5 per Stealth rank
 HasRogueAttacked        = false
+-- Dojo training — which stat buff is active (items.lua RegisterDojoTriggers; one at a time)
+DojoStrLv1Active        = false
+DojoAgiLv1Active        = false
+DojoIntLv1Active        = false
+DojoAllLv1Active        = false
 -- Wildbond — pet-kit state (abilities.lua setupWildbond)
 LifeLinkTotal           = 0.0 -- HP drained from the owner per Lifelink cast (+100/rank)
 LifelinkRank            = 0
