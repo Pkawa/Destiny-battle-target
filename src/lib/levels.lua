@@ -513,17 +513,25 @@ local LevelData = {
         setup = setupLevel13,
     },
     [14] = {
-        -- Caravan escort — full pathing/trap mechanic not yet ported. Simplified.
-        intro = "|cffff8800Level 14|r — Escort the caravan! Defend against ambushes.",
-        track = 1, next = 15,
-        spawns = {
-            { u=UID.SpeedWisp, n=1,       at=ABC },
-            { u=FourCC('h01E'), n=3, dm=1, at=ABC },
-            { u=FourCC('h01F'), n=2, dm=1, at=ABC },
-            { u=FourCC('h01G'), n=1, dm=1, at=ABC },
-        },
-        victory = { type='clearAll', units={ FourCC('h01E'), FourCC('h01F'), FourCC('h01G') } },
-        setup = setupLevel14,
+        -- Caravan escort (full mechanic in setupLevel14, wired post-table).
+        intro = "Level 14 - Unraveling the Mystery  Enemies: ???  |cff32cd32Victory|r - Escort "
+            .. "the caravan with the artifact inside to the hermit, then on to the Altar of Tides.",
+        track = 1, next = 15, noAutoPatrol = true,
+        spawns = {},   -- caravan, camp NPCs, ambushes and waves all come from the setup hook
+        victory = { type='boss', unit=FourCC('O002') },   -- the Tidedweller at the last trap
+        -- Victory payoff (war3map.j 21548-1564): caravan dissolves, the cleansed artifact
+        -- I00W drops at the altar approach, chapter-phase fanfare.
+        onCleared = function()
+            local g = GetUnitsOfTypeIdAll(FourCC('h01A'))
+            ForGroup(g, function() RemoveUnit(GetEnumUnit()) end)
+            DestroyGroup(g)
+            DisplayTextToForce(GetPlayersAll(), "|cffff0000The Dark Artifact has been cleansed!|r")
+            CreateItem(FourCC('I00W'),
+                GetRectCenterX(rct.CaravanPathC), GetRectCenterY(rct.CaravanPathC))
+            PingMinimapLocForForce(GetPlayersAll(), GetRectCenter(rct.CaravanPathC), 10.0)
+            DisplayTimedTextToForce(GetPlayersAll(), 10.0,
+                "|cffff0000Phase 3: Troubles in the Wood|r - |cff7777aaComplete!|r")
+        end,
     },
     [15] = {
         intro = "|cffff8800Level 15|r — Undead infantry with hellspawn support.",
@@ -849,12 +857,243 @@ local function setupLevel13()
     end)
 end
 
--- Level 14: Caravan Escort stub (war3map.j 21017-21043 + 21147+)
--- Full pathing + trap/miniboss mechanic not yet ported.
--- Simplified: spawn attacker enemies + place caravan as flavor unit.
+-- Level 14: the FULL caravan escort (war3map.j 21017-21581).
+-- The caravan (h01A, P8) drives itself along CaravanPathA → B → (hermit dialogue) → B2 → C
+-- via a 5s re-order tick; reaching each waypoint springs an ambush (the trap "gates" in the
+-- Destructible_Trap rects are blasted open and attackers pour out, the caravan holds, then
+-- rolls on). At CaravanPathC the Tidedweller (O002) rises with two periodic spells; killing
+-- it is the level victory. Timed reinforcement waves harass the town all the while; the
+-- caravan dying is a hard defeat.
 local function setupLevel14()
-    CreateNUnitsAtLoc(1, FourCC('h01A'), Player(8), GetRectCenter(rct.StartingPlayerArea), bj_UNIT_FACING)
+    local gen = levelGen
+    local CARAVAN = FourCC('h01A')
+
+    local function caravan()
+        local g = GetUnitsOfTypeIdAll(CARAVAN)
+        local u = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        return u
+    end
+    local function holdCaravan()
+        local c = caravan()
+        if c then IssueImmediateOrderBJ(c, "holdposition") end
+    end
+    -- ambush helper: clear the trap gate destructibles, spawn attackers in the rect,
+    -- and order everything there onto the caravan (war3map.j Trap_A/B/C shape).
+    local function springTrap(rectKey, spawnsList)
+        local r = rct[rectKey]
+        EnumDestructablesInRect(r, nil, function() KillDestructable(GetEnumDestructable()) end)
+        for _, s in ipairs(spawnsList) do
+            local count = s[1] + (s[3] or 0) * DifficultyModifier
+            if count > 0 then
+                local loc = GetRandomLocInRect(r)
+                CreateNUnitsAtLoc(count, FourCC(s[2]), P9, loc, bj_UNIT_FACING)
+                RemoveLocation(loc)
+            end
+        end
+        TriggerSleepAction(1.0)
+        local g = GetUnitsInRectOfPlayer(r, P9)
+        ForGroup(g, function()
+            local tgt = caravan()
+            if tgt then IssueTargetOrderBJ(GetEnumUnit(), "attack", tgt) end
+        end)
+        DestroyGroup(g)
+        holdCaravan()
+    end
+
+    -- caravan + hermit camp + altar NPCs (war3map.j 21024-21027)
+    CreateNUnitsAtLoc(1, CARAVAN, Player(8), GetRectCenter(rct.StartingPlayerArea), bj_UNIT_FACING)
     CreateNUnitsAtLoc(1, FourCC('h01B'), Player(8), GetRectCenter(rct.Hermit), bj_UNIT_FACING)
+    CreateNUnitsAtLoc(1, FourCC('nfr2'), Player(8), GetRectCenter(rct.HermitTent), bj_UNIT_FACING)
+    CreateNUnitsAtLoc(1, FourCC('nnad'), Player(8), GetRectCenter(rct.AltarOfTides), bj_UNIT_FACING)
+    local c0 = caravan()
+    if c0 then PingMinimapLocForForce(GetPlayersAll(), GetUnitLoc(c0), 15.0) end
+
+    -- caravan pathing tick: every 5s re-order it toward the current waypoint
+    local pathTarget = 'CaravanPathA'
+    local pathOn = true
+    local pathT = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(pathT, 5.0)
+    TriggerAddAction(pathT, function()
+        if levelGen ~= gen then DisableTrigger(pathT); return end
+        if not pathOn then return end
+        local c = caravan()
+        if c then IssuePointOrderLoc(c, "move", GetRectCenter(rct[pathTarget])) end
+    end)
+
+    -- caravan-under-attack warning (30s throttle, war3map.j 21481-21493)
+    local warnT = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(warnT, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(warnT, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == CARAVAN and levelGen == gen
+    end))
+    TriggerAddAction(warnT, function()
+        DisableTrigger(warnT)
+        DisplayTextToForce(GetPlayersAll(), "|cffff0000WARNING:|r - The Caravan is under ATTACK!")
+        PlaySoundBJ(snd.HordeSound2)
+        TriggerSleepAction(30.0)
+        if levelGen == gen then EnableTrigger(warnT) end
+    end)
+
+    -- caravan destroyed = defeat (war3map.j 21438-1467; cinematic shortened)
+    local defeatT = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(defeatT, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(defeatT, Condition(function()
+        return GetUnitTypeId(GetDyingUnit()) == CARAVAN and levelGen == gen
+    end))
+    TriggerAddAction(defeatT, function()
+        MusicOn = false; BossMusic = false; NearDefeatMusic = false
+        StopAllMusic()
+        ForForce(GetPlayersAll(), function()
+            CameraSetupApplyForPlayer(true, cam.DefeatCamera, GetEnumPlayer(), 0)
+        end)
+        TriggerSleepAction(1.0)
+        PauseAllUnitsBJ(true)
+        DisplayTextToForce(GetPlayersAll(),
+            "|cffff0000Defeat...|r |cffff0000- The Caravan has been destroyed..|r")
+        TriggerSleepAction(4.0)
+        PlaySoundBJ(snd.GameOverToD)
+        TriggerSleepAction(5.0)
+        DisplayTextToForce(GetPlayersAll(),
+            "|cffff0000With the caravan's destruction, Adomach's lackeys stole the artifact and perverted its true nature with Fell Magic...|r")
+    end)
+
+    -- waypoint reactions (each fires once, on the CARAVAN entering)
+    local function onCaravanEnter(rectKey, fn)
+        local t
+        t = OnEnterRect(rct[rectKey], function()
+            return GetUnitTypeId(GetEnteringUnit()) == CARAVAN and levelGen == gen
+        end, function()
+            DisableTrigger(t)
+            fn()
+        end)
+    end
+
+    -- Trap A (CaravanPathA): gates at Trap_A/B blow open (war3map.j 21182-21196)
+    onCaravanEnter('CaravanPathA', function()
+        pathOn = false
+        TriggerSleepAction(3.0)
+        springTrap('DestructibleTrapA', { { 2, 'h017', 1 } })
+        springTrap('DestructibleTrapB', { { 2, 'h017', 1 }, { 0, 'h016', 1 } })
+        TriggerSleepAction(15.0)
+        pathTarget = 'CaravanPathB'
+        pathOn = true
+    end)
+
+    -- Trap B (CaravanPathB) → hermit dialogue → onward (war3map.j 21229-21240, 21277-21285)
+    onCaravanEnter('CaravanPathB', function()
+        pathOn = false
+        TriggerSleepAction(1.75)
+        springTrap('DestructibleTrapC', { { 3, 'h00W', 1 }, { 0, 'h016', 1 } })
+        TriggerSleepAction(15.0)
+        holdCaravan()
+        DisplayTimedTextToForce(GetPlayersAll(), 12.0,
+            "|cff32cd32Hermit: You have done well to bring this to me. Though this once was a powerful force for good, it has since been corrupted into a former shadow of itself.|r")
+        TriggerSleepAction(12.0)
+        DisplayTimedTextToForce(GetPlayersAll(), 12.0,
+            "|cff32cd32Hermit: Take this artifact to the Altar of Tides, where it may be cleansed of its taint. Go now, heroes, and be well.|r")
+        TriggerSleepAction(12.0)
+        DisplayTimedTextToForce(GetPlayersAll(), 12.0,
+            "|cff32cd32New Victory Condition: Escort the Caravan to the Altar of Tides and protect it.|r")
+        pathTarget = 'CaravanPathB2'
+        pathOn = true
+    end)
+
+    -- Trap C (CaravanPathB2): the Trap_D ambush w/ mini-leader h04Q (war3map.j 21328-21340)
+    onCaravanEnter('CaravanPathB2', function()
+        pathOn = false
+        TriggerSleepAction(1.75)
+        springTrap('DestructibleTrapD', { { 0, 'h014', 2 }, { 1, 'h04Q' }, { 0, 'h016', 1 } })
+        TriggerSleepAction(15.0)
+        pathTarget = 'CaravanPathC'
+        pathOn = true
+    end)
+
+    -- Last Trap (CaravanPathC): the Tidedweller O002 rises (war3map.j 21393-21424)
+    onCaravanEnter('CaravanPathC', function()
+        pathOn = false
+        DisableTrigger(pathT)
+        TriggerSleepAction(1.75)
+        MusicOn = false
+        PlaySoundBJ(snd.CreepAggroWhat1)
+        DisplayTextToForce(GetPlayersAll(), "|cffff0000Something approaches...|r")
+        PingMinimapLocForForceEx(GetPlayersAll(), GetRectCenter(rct.Lvl14BossSpawn),
+            10.0, bj_MINIMAPPINGSTYLE_SIMPLE, 0.0, 0.0, 100)
+        local bx, by = GetRectCenterX(rct.Lvl14BossSpawn), GetRectCenterY(rct.Lvl14BossSpawn)
+        TriggerSleepAction(5.0)
+        local fx = AddSpecialEffect("Abilities\\Spells\\Orc\\EarthQuake\\EarthQuakeTarget.mdl", bx, by)
+        TriggerSleepAction(2.0); DestroyEffect(fx); TriggerSleepAction(2.0)
+        fx = AddSpecialEffect("Abilities\\Spells\\Other\\FrostDamage\\FrostDamage.mdl", bx, by)
+        TriggerSleepAction(2.0); DestroyEffect(fx); TriggerSleepAction(2.0)
+        fx = AddSpecialEffect("Abilities\\Spells\\NightElf\\Blink\\BlinkTarget.mdl", bx, by)
+        local boss = CreateUnit(P9, FourCC('O002'), bx, by, bj_UNIT_FACING)
+        TriggerSleepAction(2.0); DestroyEffect(fx)
+        SetHeroLevelBJ(boss, math.max(1, 4 * DifficultyModifier), false)
+        TriggerSleepAction(1.0)
+        SelectHeroSkill(boss, FourCC('AHtb'))   -- Whirlpool (Storm Bolt stun)
+        SelectHeroSkill(boss, FourCC('AEfk'))   -- Maelstrom (Fan of Knives)
+        StartBossMusic()
+        -- Tidedweller AI: fan of knives every 10s; thunderbolt a random nearby unit every 14s
+        local ai1 = CreateTrigger()
+        TriggerRegisterTimerEventPeriodic(ai1, 10.0)
+        TriggerAddAction(ai1, function()
+            if levelGen ~= gen then DisableTrigger(ai1); return end
+            local g = GetUnitsOfTypeIdAll(FourCC('O002'))
+            local b = GroupPickRandomUnit(g)
+            DestroyGroup(g)
+            if b then IssueImmediateOrderBJ(b, "fanofknives") end
+        end)
+        local ai2 = CreateTrigger()
+        TriggerRegisterTimerEventPeriodic(ai2, 14.0)
+        TriggerAddAction(ai2, function()
+            if levelGen ~= gen then DisableTrigger(ai2); return end
+            local g = GetUnitsOfTypeIdAll(FourCC('O002'))
+            local b = GroupPickRandomUnit(g)
+            DestroyGroup(g)
+            if not b then return end
+            local tg = CreateGroup()
+            GroupEnumUnitsInRange(tg, GetUnitX(b), GetUnitY(b), 1100.0, nil)
+            local tgt = GroupPickRandomUnit(tg)
+            DestroyGroup(tg)
+            if tgt then IssueTargetOrderBJ(b, "thunderbolt", tgt) end
+        end)
+        IssuePointOrderLoc(boss, "patrol", GetRectCenter(rct.StartingPlayerArea))
+    end)
+
+    -- timed town-harassment waves (war3map.j Spawn_Attack 21104-21143), patrol to base
+    local wavesT = CreateTrigger()
+    TriggerAddAction(wavesT, function()
+        local WAVES = {
+            { wait = 22, units = { { 1, 'h016' }, { 1, 'h00W' } } },
+            { wait = 22, units = { { 2, 'h014' }, { 1, 'h016' }, { 1, 'h00W' } } },
+            { wait = 18, units = { { 3, 'h014' }, { 1, 'h016' } } },
+            { wait = 22, units = { { 2, 'h014' }, { 1, 'h016' }, { 2, 'h017' } } },
+            { wait = 22, units = { { 1, 'h016' }, { 1, 'h00W' } } },
+            { wait = 18, units = { { 2, 'h014' }, { 1, 'h016' }, { 1, 'h00W' } } },
+            { wait = 22, units = { { 3, 'h014' }, { 1, 'h016' } } },
+            { wait = 0,  units = { { 2, 'h014' }, { 1, 'h016' }, { 2, 'h017' } } },
+        }
+        TriggerSleepAction(15.0)
+        if levelGen ~= gen then return end
+        DisplayTimedTextToForce(GetPlayersAll(), 8.0, "|cffff0000The forest shakes with activity...|r")
+        PlaySoundBJ(snd.CreepAggroWhat1)
+        TriggerSleepAction(7.0)
+        for _, w in ipairs(WAVES) do
+            if levelGen ~= gen then return end
+            for _, u in ipairs(w.units) do
+                CreateNUnitsAtLoc(u[1], FourCC(u[2]), P9, GetRectCenter(rct.SpawnA), bj_UNIT_FACING)
+            end
+            local g = GetUnitsOfPlayerAll(P9)
+            ForGroup(g, function()
+                if GetUnitTypeId(GetEnumUnit()) ~= FourCC('O002') then
+                    IssuePointOrderLoc(GetEnumUnit(), "patrol", GetRectCenter(rct.StartingPlayerArea))
+                end
+            end)
+            DestroyGroup(g)
+            if w.wait > 0 then TriggerSleepAction(w.wait) end
+        end
+    end)
+    TriggerExecute(wavesT)
 end
 
 -- Level 16 AI: h01G casts slow on its attacker (war3map.j 21789-21798)

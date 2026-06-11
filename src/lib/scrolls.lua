@@ -109,4 +109,90 @@ function RegisterScrollTriggers()
             UnitAddAbility(hero, s.abil)
         end
     end)
+
+    registerScrollEffects()
+end
+
+-- ── Learned-spell EFFECT triggers (war3map.j 28761-29020) ──────────────────────
+-- Six learned spells carry trigger-side effects beyond their object data.
+function registerScrollEffects()
+    -- Cut (A09L): the slash deals STR + 50 bonus damage to the target.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A09L')
+    end, function()
+        local c = GetSpellAbilityUnit()
+        UnitDamageTarget(c, GetSpellTargetUnit(), GetHeroStr(c, true) + 50.0,
+            false, false, ATTACK_TYPE_HERO, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+    end)
+
+    -- Devouring Plague (A0G9): 30s after casting, the caster recovers 450 HP.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0G9')
+    end, function()
+        local c = GetSpellAbilityUnit()
+        TriggerSleepAction(30.0)
+        if GetUnitTypeId(c) ~= 0 then
+            SetUnitLifeBJ(c, GetUnitState(c, UNIT_STATE_LIFE) + 450.0)
+            FloatText(c, "+450", 0, 100, 0, 6.0)
+        end
+    end)
+
+    -- Blood Pulse (A0KD): a ring of 8 e007 pulse dummies + 250 damage in 100 around the caster.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0KD')
+    end, function()
+        local c = GetSpellAbilityUnit()
+        local x, y = GetUnitX(c), GetUnitY(c)
+        for _, off in ipairs({ {-50,0},{50,0},{0,50},{0,-50},{-50,-50},{-50,50},{50,-50},{50,50} }) do
+            CreateUnit(Player(8), FourCC('e007'), x + off[1], y + off[2], bj_UNIT_FACING)
+        end
+        UnitDamagePoint(c, 0, 250.0, x, y, 100.0, false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+    end)
+
+    -- Demon Lights (A0AS): four wandering lights (e010/e00Y/e00Z/e00X) around the caster
+    -- for ~20s. Simplified: the original choreographs per-second move orders; here the
+    -- lights wander on a 1s tick and are removed at the end (cosmetic).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0AS')
+    end, function()
+        local c = GetSpellAbilityUnit()
+        local owner = GetOwningPlayer(c)
+        local lights = {}
+        for _, id in ipairs({ 'e010', 'e00Y', 'e00Z', 'e00X' }) do
+            local a = math.rad(GetRandomReal(0.0, 360.0))
+            local d = GetRandomReal(0.0, 200.0)
+            lights[#lights + 1] = CreateUnit(owner, FourCC(id),
+                GetUnitX(c) + d * math.cos(a), GetUnitY(c) + d * math.sin(a), bj_UNIT_FACING)
+        end
+        for _ = 1, 20 do
+            TriggerSleepAction(1.0)
+            for _, u in ipairs(lights) do
+                if GetUnitTypeId(u) ~= 0 then
+                    local a = math.rad(GetRandomReal(0.0, 360.0))
+                    IssuePointOrder(u, "move",
+                        GetUnitX(u) + 150.0 * math.cos(a), GetUnitY(u) + 150.0 * math.sin(a))
+                end
+            end
+        end
+        for _, u in ipairs(lights) do RemoveUnit(u) end
+    end)
+
+    -- Macbaine's Filching (A0AX): steal AGI + 1d50 gold ("N Gold stolen!").
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0AX')
+    end, function()
+        local c = GetSpellAbilityUnit()
+        local amount = GetHeroAgi(c, true) + GetRandomInt(1, 50)
+        AdjustPlayerStateBJ(amount, GetOwningPlayer(c), PLAYER_STATE_RESOURCE_GOLD)
+        FloatText(c, tostring(amount) .. " Gold stolen!", 100, 100, 0, 3.0)
+    end)
+
+    -- Magic Rations (A0H9): conjure a rations item (I09S) at the caster's feet.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0H9')
+    end, function()
+        local c = GetSpellAbilityUnit()
+        CreateItem(FourCC('I09S'), GetUnitX(c), GetUnitY(c))
+    end)
 end

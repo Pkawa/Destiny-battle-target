@@ -293,9 +293,156 @@ local function setupRogue()
     end)
 end
 
+-- ══ Wildbond (H03J) — pet kit, war3map.j 46619-47095 ════════════════════════════
+-- Her spells are bound to the pet: Spell_Only_Pet cancels pet-spells aimed at anything
+-- else. The pair share levels (Level_Matching / Pet_Scaling) and a death bond
+-- (Wildbond_Dies — one dies, both die; the A0I8 ward disables it). Lifelink (A0CM)
+-- drains the owner to heal the pet; Beast Training (A0CN) upgrades the pet's passive
+-- per rank; Eagle Eye (A0D2) is the pet twin of Far Shot; Bear Protect (A0CS) recalls
+-- the pet to the owner; Spirit Bond (A0D4) heals the other half on every kill.
+
+local function petAlive()
+    return WildbondPet and GetUnitTypeId(WildbondPet) ~= 0
+end
+local function ownerAlive()
+    return Wildbond and GetUnitTypeId(Wildbond) ~= 0
+end
+
+local function setupWildbond()
+    -- Spell_Only_Pet (A0CL): casting a pet-spell at anything but the pet is cancelled.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0CL')
+            and GetSpellTargetUnit() ~= WildbondPet
+    end, function()
+        IssueImmediateOrderBJ(GetSpellAbilityUnit(), "stop")
+    end)
+
+    -- Level sharing: the pet grows +5 scale per pet level (owner catches up if behind);
+    -- the owner leveling pulls the pet up (war3map.j Pet_Scaling / Level_Matching).
+    OnAnyUnit(EVENT_PLAYER_HERO_LEVEL, function()
+        return GetLevelingUnit() == WildbondPet
+    end, function()
+        WildbondPetSize = WildbondPetSize + 5.0
+        SetUnitScalePercent(WildbondPet, WildbondPetSize, WildbondPetSize, WildbondPetSize)
+        if ownerAlive() and GetHeroLevel(Wildbond) < GetHeroLevel(WildbondPet) then
+            SetHeroLevelBJ(Wildbond, GetHeroLevel(WildbondPet), true)
+        end
+    end)
+    OnAnyUnit(EVENT_PLAYER_HERO_LEVEL, function()
+        return GetLevelingUnit() == Wildbond
+    end, function()
+        if petAlive() and GetHeroLevel(WildbondPet) < GetHeroLevel(Wildbond) then
+            SetHeroLevelBJ(WildbondPet, GetHeroLevel(Wildbond), true)
+        end
+    end)
+
+    -- Death bond: if either half dies, both die 1s later (disabled by the A0I8 ward).
+    local bondT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        local d = GetDyingUnit()
+        return (d == Wildbond or d == WildbondPet) and Wildbond ~= nil and WildbondPet ~= nil
+    end, function()
+        TriggerSleepAction(1.0)
+        if ownerAlive() then KillUnit(Wildbond) end
+        if petAlive() then KillUnit(WildbondPet) end
+    end)
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0I8')
+    end, function()
+        DisableTrigger(bondT)
+    end)
+
+    -- Lifelink (A0CM): learn = +100 drained per rank (sets the owner handle); cast =
+    -- owner loses LifeLinkTotal HP, the pet heals LifeLinkTotal × multiplier.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0CM')
+    end, function()
+        Wildbond = GetLearningUnit()
+        LifeLinkTotal = LifeLinkTotal + 100.0
+        LifelinkRank = LifelinkRank + 1
+        if LifelinkRank >= 5 then LifeLinkMultiplier = 3.0 end
+    end)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0CM')
+    end, function()
+        if not (ownerAlive() and petAlive()) then return end
+        SetUnitLifeBJ(Wildbond, GetUnitState(Wildbond, UNIT_STATE_LIFE) - LifeLinkTotal)
+        SetUnitLifeBJ(WildbondPet,
+            GetUnitState(WildbondPet, UNIT_STATE_LIFE) + LifeLinkTotal * LifeLinkMultiplier)
+    end)
+
+    -- Eagle Eye (A0D2): pet twin of Far Shot — R00O range tech at the new rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0D2')
+    end, function()
+        EagleEyeLearn = EagleEyeLearn + 1
+        TriggerSleepAction(2.0)
+        SetPlayerTechResearchedSwap(FourCC('R00O'), EagleEyeLearn,
+            GetOwningPlayer(GetLearningUnit()))
+    end)
+
+    -- Beast Training (A0CN): per rank, swap the pet's passive up the A0CO→A0CP→A0CQ→A0CR
+    -- chain; rank 5 adds AIx5 on top (war3map.j 46956).
+    local BEAST = { FourCC('A0CO'), FourCC('A0CP'), FourCC('A0CQ'), FourCC('A0CR') }
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0CN')
+    end, function()
+        BeastTrainingRank = BeastTrainingRank + 1
+        if not petAlive() then return end
+        local r = BeastTrainingRank
+        if r == 1 then
+            UnitAddAbility(WildbondPet, BEAST[1])
+        elseif r >= 2 and r <= 4 then
+            UnitRemoveAbility(WildbondPet, BEAST[r - 1])
+            TriggerSleepAction(1.0)
+            if petAlive() then UnitAddAbility(WildbondPet, BEAST[r]) end
+        elseif r == 5 then
+            UnitAddAbility(WildbondPet, FourCC('AIx5'))
+        end
+    end)
+
+    -- Bear Protect the Master (A0CS): 0.5s later the pet is recalled to the owner's side.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0CS')
+    end, function()
+        TriggerSleepAction(0.5)
+        if not (ownerAlive() and petAlive()) then return end
+        local a = math.rad(GetRandomReal(0.0, 360.0))
+        SetUnitPosition(WildbondPet,
+            GetUnitX(Wildbond) + 40.0 * math.cos(a), GetUnitY(Wildbond) + 40.0 * math.sin(a))
+    end)
+
+    -- Spirit Bond (A0D4): every kill by one half heals the other (+SpiritBondHeal,
+    -- +15 per rank); the kill triggers arm on first learn.
+    local heroKillT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return Wildbond ~= nil and GetKillingUnit() == Wildbond
+    end, function()
+        if petAlive() then
+            SetUnitLifeBJ(WildbondPet, GetUnitState(WildbondPet, UNIT_STATE_LIFE) + SpiritBondHeal)
+        end
+    end)
+    local petKillT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return WildbondPet ~= nil and GetKillingUnit() == WildbondPet
+    end, function()
+        if ownerAlive() then
+            SetUnitLifeBJ(Wildbond, GetUnitState(Wildbond, UNIT_STATE_LIFE) + SpiritBondHeal)
+        end
+    end)
+    DisableTrigger(heroKillT)
+    DisableTrigger(petKillT)
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0D4')
+    end, function()
+        Wildbond = GetLearningUnit()
+        SpiritBondHeal = SpiritBondHeal + 15.0
+        EnableTrigger(heroKillT)
+        EnableTrigger(petKillT)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
     setupArcaneArcher()
     setupRogue()
+    setupWildbond()
 end

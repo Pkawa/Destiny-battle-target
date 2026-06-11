@@ -206,6 +206,10 @@ EarthenChance           = 0   -- last proc roll (1-50)
 RogueDamageStacks       = 0   -- built every 2s while not attacking; discharged on attack
 RogueMaxDamageStacks    = 0   -- +5 per Stealth rank
 HasRogueAttacked        = false
+-- Wildbond — pet-kit state (abilities.lua setupWildbond)
+LifeLinkTotal           = 0.0 -- HP drained from the owner per Lifelink cast (+100/rank)
+LifelinkRank            = 0
+EagleEyeLearn           = 0   -- Eagle Eye ranks (R00O range tech, pet twin of Far Shot)
 CentaurTreantTotal      = 2
 AidAnotherTimer         = 5.0
 SofUnityLowestLevel     = 100

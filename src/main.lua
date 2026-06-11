@@ -124,25 +124,31 @@ for i = 0, 7 do
     end
 end
 
--- Spawn one wisp per human player at the mode type selection starting position,
--- pan their camera there, and select it so they immediately have control.
+-- Mode + difficulty are HOST-ONLY decisions: spawn ONE selection wisp for the first
+-- playing human (war3map.j STARTING_TRIGGER 16986-16990 — Player 0, else Player 1; the
+-- per-player wisps appear later, at the hero-pick stage). Everyone's camera watches.
+-- (KNOWN_BUGS #11: previously every player got a wisp here → conflicting mode picks.)
+local host = nil
 for i = 0, 7 do
     local p = Player(i)
     if GetPlayerController(p) == MAP_CONTROL_USER
         and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING then
-        local wisp = CreateUnit(p, FourCC('ewsp'),
-            GetRectCenterX(rct.ModeTypeSelection),
-            GetRectCenterY(rct.ModeTypeSelection),
-            bj_UNIT_FACING)
         SetCameraPositionForPlayer(p,
             GetRectCenterX(rct.ModeTypeSelection),
             GetRectCenterY(rct.ModeTypeSelection))
-        if GetLocalPlayer() == p then
-            ClearSelection()
-            SelectUnit(wisp, true)
-        end
+        if not host then host = p end
+    end
+end
+if host then
+    local wisp = CreateUnit(host, FourCC('ewsp'),
+        GetRectCenterX(rct.ModeTypeSelection),
+        GetRectCenterY(rct.ModeTypeSelection),
+        bj_UNIT_FACING)
+    if GetLocalPlayer() == host then
+        ClearSelection()
+        SelectUnit(wisp, true)
     end
 end
 
 DisplayTimedTextToForce(GetPlayersAll(), 30.0,
-    "|cffffcc00Welcome to Destiny Battle!|r Move your wisp into a Circle of Power to choose a game mode.")
+    "|cffffcc00Welcome to Destiny Battle!|r The host moves the wisp into a Circle of Power to choose the game mode.")
