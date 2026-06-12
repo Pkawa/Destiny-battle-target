@@ -2132,6 +2132,85 @@ local function setupDwarvenAxemaster()
     end)
 end
 
+-- ══ Border Skirmisher (H03U) — war3map.j 37867-38036 ═══════════════════════════
+-- A guerrilla trickster. Bait and Switch (A0GV): all enemies near the target point are taunted
+-- onto the Skirmisher. Sabotage (A0GW): drops DifficultyModifier by 1 for the level (restored at the
+-- next weather roll via trg_Sabotage_Reset). Decoy's Retinue (A0GX): refreshes her ring of decoy
+-- units (h03V/h03W/h03X, + h04P at rank 2) — one of each is recycled and respawned around her.
+
+-- Decoy's Retinue: rank → the decoy unit types refreshed (JASS 37984-38002).
+local DECOY_RETINUE = {
+    [1] = { FourCC('h03V'), FourCC('h03X'), FourCC('h03W') },
+    [2] = { FourCC('h03V'), FourCC('h03X'), FourCC('h03W'), FourCC('h04P') },
+}
+
+local function setupBorderSkirmisher()
+    -- Bait and Switch (cast A0GV): taunt every Player(9) unit within 512 of the target point onto her.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0GV')
+    end, function()
+        BorderSkirmisherHero = GetSpellAbilityUnit()
+        ForUnitsInRange(GetSpellTargetX(), GetSpellTargetY(), 512.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            if BorderSkirmisherHero then IssueTargetOrder(GetEnumUnit(), "attack", BorderSkirmisherHero) end
+        end)
+    end)
+
+    -- Sabotage (cast A0GW): once per level, lower the difficulty by 1 (only above the floor of 1).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0GW')
+    end, function()
+        if DifficultyModifier > 1 and not SabotageOn then
+            DifficultyModifier = DifficultyModifier - 1
+            if snd.InvisibilityTarget then PlaySoundBJ(snd.InvisibilityTarget) end
+            DisplayTextToForce(GetPlayersAll(),
+                GetPlayerName(GetOwningPlayer(GetSpellAbilityUnit())) .. " casts |cff995500Sabotage|r!")
+            SabotageOn = true
+        end
+    end)
+
+    -- Sabotage Reset (no event — ConditionalTriggerExecute'd from RollWeather at each level start):
+    -- restore the difficulty the Sabotage borrowed. Condition mirrors the JASS (only when active).
+    local resetT = CreateTrigger()
+    TriggerAddCondition(resetT, Condition(function() return SabotageOn end))
+    TriggerAddAction(resetT, function()
+        DifficultyModifier = DifficultyModifier + 1
+        SabotageOn = false
+    end)
+    trg_Sabotage_Reset = resetT
+
+    -- Decoy's Retinue Learn (A0GX): +1 rank (selects the decoy set).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0GX')
+    end, function()
+        DecoysRetinue = DecoysRetinue + 1
+    end)
+
+    -- Decoy's Retinue (cast A0GX): recycle one of each decoy type and respawn it 120 around her.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0GX')
+    end, function()
+        local set = DECOY_RETINUE[DecoysRetinue]
+        if not set then return end
+        local caster = GetSpellAbilityUnit()
+        local owner = GetOwningPlayer(caster)
+        for _, code in ipairs(set) do
+            local g = GetUnitsOfTypeIdAll(code)
+            local old = GroupPickRandomUnit(g)
+            DestroyGroup(g)
+            if old then RemoveUnit(old) end
+        end
+        TriggerSleepAction(1.0)
+        if GetUnitTypeId(caster) == 0 then return end
+        local cx, cy = GetUnitX(caster), GetUnitY(caster)
+        for _, code in ipairs(set) do
+            local a = GetRandomDirectionDeg() * DEG2RAD
+            CreateUnit(owner, code, cx + 120.0 * math.cos(a), cy + 120.0 * math.sin(a), bj_UNIT_FACING)
+        end
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -2155,4 +2234,5 @@ function RegisterAbilityTriggers()
     setupClericOfElvenWord()
     setupDiscipleOfGrace()
     setupDwarvenAxemaster()
+    setupBorderSkirmisher()
 end

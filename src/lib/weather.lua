@@ -188,6 +188,10 @@ end
 
 -- Roll and apply a level's weather. Called after each level starts (levels.lua).
 function RollWeather()
+    -- Border Skirmisher's Sabotage temporarily lowers DifficultyModifier; the JASS undoes it here,
+    -- at each per-level weather roll (war3map.j 30286). trg_Sabotage_Reset is created in abilities.lua;
+    -- ConditionalTriggerExecute only restores when SabotageOn is set (matching the JASS condition).
+    if trg_Sabotage_Reset then ConditionalTriggerExecute(trg_Sabotage_Reset) end
     local n = GetRandomInt(1, 31)
     RandomWeather = n
     DenyWeather = 0
