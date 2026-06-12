@@ -1660,6 +1660,124 @@ local function setupSwashbuckler()
     end)
 end
 
+-- ══ Cleric of Order (H001) — war3map.j 38500-38776 ════════════════════════════════════════════════
+-- A controller-priest. Symbol of Order (A001): cosmetic mark on the target. Inversion (A003): drains
+-- nearby enemies that are healthier than the cleric down toward her own HP%, capped per rank.
+-- Transcend to Order (ult A004): the team's heroes self-revive at base after TranscendTime seconds.
+-- Power Word: Stop (ult A05A): an 8s global time-freeze — enemies are paused & frozen while allies act.
+
+local function setupClericOfOrder()
+    -- Symbol of Order (cast A001): a cosmetic "Physical Immunity!" text tag on the target
+    -- (TRIGSTR_2398 — the buff grants physical immunity; war3map.j 38592).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A001')
+    end, function()
+        local t = GetSpellTargetUnit()
+        if t then FloatText(t, "Physical Immunity!", 100, 100, 0, 3.0) end
+    end)
+
+    -- Learn Inversion (A003): +1 rank, set the drain cap (rank 1/2/3 → 25/33/50% HP).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A003')
+    end, function()
+        InversionSkillRank = InversionSkillRank + 1
+        if InversionSkillRank == 1 then
+            InversionMaxHealth = 25.0
+        elseif InversionSkillRank == 2 then
+            InversionMaxHealth = 33.0
+        elseif InversionSkillRank == 3 then
+            InversionMaxHealth = 50.0
+        end
+    end)
+
+    -- Inversion (effect A003): every enemy within 800 that is HEALTHIER than the caster is pulled
+    -- toward the caster's HP%: halve the gap, but never drain more than InversionMaxHealth in one hit.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A003')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        if snd.cold then PlaySoundBJ(snd.cold) end
+        local casterHP = GetUnitLifePercent(caster)
+        ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), 800.0, function()
+            local u = GetFilterUnit()
+            return GetOwningPlayer(u) == P9
+                and not IsUnitType(u, UNIT_TYPE_STRUCTURE)
+                and not IsUnitType(u, UNIT_TYPE_HERO)
+        end, function()
+            local u = GetEnumUnit()
+            local hp = GetUnitLifePercent(u)
+            if casterHP >= hp then return end          -- only drain enemies above the caster
+            local gap = (hp - casterHP) / 2.0
+            if gap >= InversionMaxHealth then
+                SetUnitLifePercentBJ(u, hp - InversionMaxHealth)
+            else
+                SetUnitLifePercentBJ(u, hp - gap)
+            end
+        end)
+    end)
+
+    -- Transcend to Order (ult): heroes auto-revive at base. Death trigger, disabled until A004 learned.
+    local transcendT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        local d = GetDyingUnit()
+        return GetOwningPlayer(d) ~= P9 and GetOwningPlayer(d) ~= P8
+            and IsUnitType(d, UNIT_TYPE_HERO)
+    end, function()
+        local hero = GetDyingUnit()
+        local owner = GetOwningPlayer(hero)
+        PlaySoundBJ(snd.SlowRezzSound)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(owner) .. " has died and will be revived in 1 minute by |cff995500Transcend to Order|r")
+        TriggerSleepAction(TranscendTime)
+        local cx, cy = GetRectCenterX(rct.StartingPlayerArea), GetRectCenterY(rct.StartingPlayerArea)
+        ReviveHero(hero, cx, cy, true)
+        if GetLocalPlayer() == owner then PanCameraToTimed(cx, cy, 0) end  -- local-only; no Location leak
+    end)
+    DisableTrigger(transcendT)
+
+    -- Transcend Research (learn A004): −15s revive delay, arm the death trigger.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A004')
+    end, function()
+        TranscendTime = TranscendTime - 15.0
+        EnableTrigger(transcendT)
+    end)
+
+    -- Power Word: Stop (cast A05A): 8-second global time freeze. Pause everyone, then let the player
+    -- heroes (slots 0–7) act while enemies stay frozen; white flash + announce; restore after 8s.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A05A')
+    end, function()
+        TriggerSleepAction(0.5)
+        PauseAllUnitsBJ(true)
+        -- Freeze the enemy (Player 9) animations; leave them paused for the duration.
+        local g = GetUnitsInRectOfPlayer(GetPlayableMapRect(), P9)
+        ForGroup(g, function() SetUnitTimeScalePercent(GetEnumUnit(), 0.0) end)
+        DestroyGroup(g)
+        -- Unpause the human player slots so allies can keep acting during the freeze.
+        for i = 0, 7 do
+            local pg = GetUnitsInRectOfPlayer(GetPlayableMapRect(), Player(i))
+            ForGroup(pg, function() PauseUnitBJ(false, GetEnumUnit()) end)
+            DestroyGroup(pg)
+        end
+        CinematicFilterGenericBJ(8.0, BLEND_MODE_BLEND,
+            "ReplaceableTextures\\CameraMasks\\White_mask.blp",
+            0.0, 100, 0.0, 70.0, 100.0, 100.0, 100.0, 100.0)
+        DisplayCineFilterBJ(true)
+        if snd.ManaPotion then PlaySoundBJ(snd.ManaPotion) end
+        if snd.Tomes then PlaySoundBJ(snd.Tomes) end
+        DisplayTimedTextToForce(GetPlayersAll(), 8.0,
+            GetPlayerName(GetOwningPlayer(GetSpellAbilityUnit())) ..
+            "  casts |cff995500Power Word: Stop|r! - TIME IS FROZEN!")
+        TriggerSleepAction(8.0)
+        DisplayCineFilterBJ(false)
+        PauseAllUnitsBJ(false)
+        local ga = GetUnitsInRectAll(GetPlayableMapRect())
+        ForGroup(ga, function() SetUnitTimeScalePercent(GetEnumUnit(), 100.0) end)
+        DestroyGroup(ga)
+        -- (Original re-executes Boss_Music here; our music loops run continuously, so nothing to resume.)
+    end)
+end
+
 -- ══ Cleric of the Small Folk (H003) — "Flip a Coin" / Luck (war3map.j 38780-38978) ═══════════════
 -- A gambler-priest. Flip a Coin (A009): on cast, roll 1–7 and apply a random fortune to the whole
 -- team after a 1s beat. Outcomes: (1) all Clerics to full HP; (2) all Clerics to full mana;
@@ -1763,4 +1881,5 @@ function RegisterAbilityTriggers()
     setupIllusionist()
     setupSwashbuckler()
     setupClericOfTheSmallFolk()
+    setupClericOfOrder()
 end
