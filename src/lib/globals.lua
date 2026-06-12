@@ -387,6 +387,7 @@ AssaultMultiplier              = 0   -- Axe Brother Assault damage = KillsForAxe
 KillsForAxeBrother             = 0   -- units the Axe Brother has killed (feeds Assault damage)
 TotalAssaultDamage             = 0   -- last computed Assault hit (display)
 TrampleDuration                = 0   -- Horizon Wanderer Trample: seconds of stomping (+2/rank)
+VengefulSpiritLvl              = 0   -- Elven Cryptguard Vengeful Spirit rank → which spirit a dead hero raises
 FireballRank                   = 0   -- ranks of Fireball (A0HZ) learned — picks the missile/damage tier
 FireNovaRank                   = 0   -- ranks of Fire Nova (A08O) learned — picks the ring density/missile
 TotalPlantKills                = 0   -- enemy units killed by Centaur Druid treant structures

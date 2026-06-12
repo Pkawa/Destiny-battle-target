@@ -795,6 +795,45 @@ local function setupHorizonWanderer()
     end)
 end
 
+-- ══ Elven Cryptguard (E019) — war3map.j 41839-41897 ════════════════════════════
+-- A necromancer-knight. Vengeful Spirit (learn A0GG): once learned, whenever ANY player hero
+-- dies (not the enemy P9 / neutral P8 sides), it rises 2s later as a vengeful spirit summon for
+-- its owner, the spirit's tier set by the Cryptguard's rank in the skill.
+
+-- Vengeful Spirit: rank → the spirit unit a fallen hero raises (JASS VengefulSpiritUnits[1..5]).
+local VENGEFUL_SPIRIT = {
+    FourCC('n00N'), FourCC('n00O'), FourCC('n00P'), FourCC('n00Q'), FourCC('n00U'),
+}
+local UNDEAD_DISSIPATE = "Objects\\Spawnmodels\\Undead\\UndeadDissipate\\UndeadDissipate.mdl"
+local vengefulAnim   -- the last raise effect (destroyed before the next, as in the original)
+
+local function setupCryptguard()
+    -- Vengeful Spirit Make: a fallen player hero rises as a spirit. Armed once the skill is learned.
+    local makeT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        local d = GetDyingUnit()
+        return GetOwningPlayer(d) ~= P8 and GetOwningPlayer(d) ~= P9
+            and IsUnitType(d, UNIT_TYPE_HERO)
+    end, function()
+        local dead = GetDyingUnit()
+        local owner = GetOwningPlayer(dead)
+        local x, y = GetUnitX(dead), GetUnitY(dead)
+        local spirit = VENGEFUL_SPIRIT[VengefulSpiritLvl]
+        if vengefulAnim then DestroyEffect(vengefulAnim) end
+        vengefulAnim = AddSpecialEffect(UNDEAD_DISSIPATE, x, y)
+        TriggerSleepAction(2.0)
+        if spirit then CreateUnit(owner, spirit, x, y, bj_UNIT_FACING) end
+    end)
+    DisableTrigger(makeT)
+
+    -- Vengeful Spirit Learn (A0GG): arm the rise + bump the spirit tier.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0GG')
+    end, function()
+        EnableTrigger(makeT)
+        VengefulSpiritLvl = VengefulSpiritLvl + 1
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -805,4 +844,5 @@ function RegisterAbilityTriggers()
     setupSharpshooter()
     setupFireMagus()
     setupHorizonWanderer()
+    setupCryptguard()
 end
