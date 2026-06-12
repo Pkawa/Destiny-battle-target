@@ -69,6 +69,12 @@ function DropDramlorGuarantee(x, y)
     CreateItem(drawFrom(Lv1Artifact), x, y)
 end
 
+-- Luck outcome 3 (Cleric of the Small Folk, war3map.j 38900): drop one random Lv1 epic at (x,y).
+-- Exposed so abilities.lua can reuse the encapsulated epic pool.
+function DropEpicItem(x, y)
+    CreateItem(drawFrom(Lv1Epic), x, y)
+end
+
 -- Lv_1_Item (war3map.j 34107) — enabled from the start (Lv_2_Item is for later levels).
 function RegisterItemDropTriggers()
     local t = CreateTrigger()

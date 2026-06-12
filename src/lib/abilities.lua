@@ -1660,6 +1660,90 @@ local function setupSwashbuckler()
     end)
 end
 
+-- ══ Cleric of the Small Folk (H003) — "Flip a Coin" / Luck (war3map.j 38780-38978) ═══════════════
+-- A gambler-priest. Flip a Coin (A009): on cast, roll 1–7 and apply a random fortune to the whole
+-- team after a 1s beat. Outcomes: (1) all Clerics to full HP; (2) all Clerics to full mana;
+-- (3) drop a random epic at the cleric; (4) +500 gold; (5) +400 XP; (6) 8 reinforcements for 120s;
+-- (7) drain all enemy mana + the cleric is superpowered (+100 all stats) for 30s.
+
+local CLERIC_SMALLFOLK = FourCC('H003')
+
+local function setupClericOfTheSmallFolk()
+    -- Flip a Coin Learn (A009): remember which unit is the Cleric of the Small Folk.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A009')
+    end, function()
+        ClericOfTheSmallFolk = GetLearningUnit()
+    end)
+
+    -- Cast Flip a Coin (A009): announce, then roll + resolve the fortune after a 1s beat.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A009')
+    end, function()
+        local cleric = ClericOfTheSmallFolk
+        if not cleric then return end
+        local owner = GetOwningPlayer(cleric)
+        PlaySoundBJ(snd.SlowRezzSound)
+        DisplayTextToPlayer(owner, 0, 0,
+            GetPlayerName(GetOwningPlayer(GetSpellAbilityUnit())) .. " casts |cff995500Flip a Coin|r!")
+
+        FloatText(cleric, "Lucky!", 100, 100, 0, 3.0)
+        LuckEffect = GetRandomInt(1, 7)
+        TriggerSleepAction(1.0)
+
+        if LuckEffect == 1 then
+            local g = GetUnitsOfTypeIdAll(CLERIC_SMALLFOLK)
+            ForGroup(g, function() SetUnitLifePercentBJ(GetEnumUnit(), 100) end)
+            DestroyGroup(g)
+            DisplayTextToPlayer(owner, 0, 0, "|cff995500Luck|r - Full HP.")
+            if snd.HolyBolt then PlaySoundBJ(snd.HolyBolt) end
+        elseif LuckEffect == 2 then
+            DisplayTextToPlayer(owner, 0, 0, "|cff995500Luck|r - Full Mana.")
+            if snd.ManaPotion then PlaySoundBJ(snd.ManaPotion) end
+            local g = GetUnitsOfTypeIdAll(CLERIC_SMALLFOLK)
+            ForGroup(g, function() SetUnitManaPercentBJ(GetEnumUnit(), 100) end)
+            DestroyGroup(g)
+        elseif LuckEffect == 3 then
+            DisplayTextToPlayer(owner, 0, 0, "|cff995500Luck|r - Random Item Discovered!")
+            DropEpicItem(GetUnitX(cleric), GetUnitY(cleric))
+            PlaySoundBJ(snd.ReceiveGold)
+        elseif LuckEffect == 4 then
+            DisplayTextToPlayer(owner, 0, 0, "|cff995500Luck|r - 500 gold gained!")
+            AdjustPlayerStateBJ(500, owner, PLAYER_STATE_RESOURCE_GOLD)
+            PlaySoundBJ(snd.ReceiveGold)
+        elseif LuckEffect == 5 then
+            DisplayTextToPlayer(owner, 0, 0, "|cff995500Luck|r - Experience gained!")
+            AddHeroXP(cleric, 400, true)
+            PlaySoundBJ(snd.RestorationPotion)
+        elseif LuckEffect == 6 then
+            DisplayTextToPlayer(owner, 0, 0, "|cff995500Luck|r - Reinforcements!")
+            local cx, cy = GetUnitX(cleric), GetUnitY(cleric)
+            for _ = 1, 4 do
+                local ang = GetRandomReal(0, 360.0) * DEG2RAD
+                local px, py = cx + 300.0 * Cos(ang), cy + 300.0 * Sin(ang)
+                CreateUnit(P8, FourCC('h004'), px, py, bj_UNIT_FACING)
+                CreateUnit(P8, FourCC('h004'), px, py, bj_UNIT_FACING)
+            end
+            TriggerSleepAction(120.0)
+            local g = GetUnitsOfTypeIdAll(FourCC('h004'))
+            ForGroup(g, function() RemoveUnit(GetEnumUnit()) end)
+            DestroyGroup(g)
+        elseif LuckEffect == 7 then
+            local g = GetUnitsInRectOfPlayer(GetPlayableMapRect(), P9)
+            ForGroup(g, function() SetUnitState(GetEnumUnit(), UNIT_STATE_MANA, 0) end)
+            DestroyGroup(g)
+            DisplayTextToPlayer(owner, 0, 0, "|cff995500Luck|r - Superpowered for 30 seconds!")
+            ModifyHeroStat(bj_HEROSTAT_STR, cleric, bj_MODIFYMETHOD_ADD, 100)
+            ModifyHeroStat(bj_HEROSTAT_AGI, cleric, bj_MODIFYMETHOD_ADD, 100)
+            ModifyHeroStat(bj_HEROSTAT_INT, cleric, bj_MODIFYMETHOD_ADD, 100)
+            TriggerSleepAction(30.0)
+            ModifyHeroStat(bj_HEROSTAT_STR, cleric, bj_MODIFYMETHOD_SUB, 100)
+            ModifyHeroStat(bj_HEROSTAT_AGI, cleric, bj_MODIFYMETHOD_SUB, 100)
+            ModifyHeroStat(bj_HEROSTAT_INT, cleric, bj_MODIFYMETHOD_SUB, 100)
+        end
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1678,4 +1762,5 @@ function RegisterAbilityTriggers()
     setupSunSoul()
     setupIllusionist()
     setupSwashbuckler()
+    setupClericOfTheSmallFolk()
 end
