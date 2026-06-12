@@ -76,6 +76,9 @@ RegisterBossDropTriggers()
 RegisterChestTriggers()
 RegisterWorldDropTriggers()
 
+-- Register the Treasure Chest pinata (accumulate Player-9 kills -> spawn a chest -> loot)
+RegisterTreasureChestDrop()
+
 -- Register set-item combining (hold all pieces -> combined item)
 RegisterSetTriggers()
 

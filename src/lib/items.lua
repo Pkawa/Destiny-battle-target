@@ -126,6 +126,39 @@ local function chestTrapText(loc, msg)
     SetTextTagLifespanBJ(GetLastCreatedTextTag(), 5)
 end
 
+-- The low-Locksmithing trap shared by both chest systems (pre-placed dungeon chests and
+-- the dropped treasure chests). With a bad lockpick roll one of four traps fires.
+-- Does NOT remove `loc` — the caller owns it.
+local function springChestTrap(d, loc)
+    -- Locksmithing reduces the trap chance; <6 means the lock was picked safely.
+    if GetRandomInt(1, 10) - (Locksmithing or 0) < 6 then return end
+    local trap = GetRandomInt(1, 4)
+    chestTrapText(loc, CHEST_TRAP_MSG[trap])
+    if trap == 1 then  -- Spike Trap: 200 dmg in r225
+        local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[1])
+        UnitDamagePointLoc(d, 0, 225.0, loc, 200.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
+        TriggerSleepAction(3.0)
+        DestroyEffect(sfx)
+    elseif trap == 2 then  -- Needle Trap: 100 dmg in r450
+        local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[2])
+        UnitDamagePointLoc(d, 0, 450.0, loc, 100.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
+        TriggerSleepAction(3.0)
+        DestroyEffect(sfx)
+    elseif trap == 3 then  -- Self Destruct: delayed 500 dmg in r350
+        UnitDamagePointLoc(d, 5.0, 350.0, loc, 500.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
+        TriggerSleepAction(5.0)
+        local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[3])
+        TriggerSleepAction(3.0)
+        DestroyEffect(sfx)
+    else  -- Mana Shear: drain the opener's mana
+        local killer = GetKillingUnitBJ()
+        if killer then SetUnitManaPercentBJ(killer, 0.0) end
+        local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[4])
+        TriggerSleepAction(3.0)
+        DestroyEffect(sfx)
+    end
+end
+
 function RegisterChestTriggers()
     local t = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
@@ -139,36 +172,58 @@ function RegisterChestTriggers()
         for _, p in ipairs(loot) do
             CreateItemLoc(drawFrom(p), loc)
         end
-        -- Locksmithing reduces the trap chance; <6 means the lock was picked safely.
-        if GetRandomInt(1, 10) - (Locksmithing or 0) < 6 then
-            RemoveLocation(loc)
+        springChestTrap(d, loc)
+        RemoveLocation(loc)
+    end)
+end
+
+-- ── Treasure Chest Drop (war3map.j 34292-34600) ──
+-- A loot pinata separate from the pre-placed dungeon chests above: every Player(9) kill
+-- accumulates TreasureChestDrop by 1-6, and at >=300 a Treasure Chest unit spawns at the
+-- corpse owned by Player(11) (so the party must kill it). Destroying that chest spills
+-- 2 Uncommon + 2 Rare + 1 Epic from the tier pools, plus a possible Locksmithing trap.
+-- The Lv2 swap (h05E + Lv2 pools) fires at the Level 10->11 loot-tier upgrade; until that
+-- upgrade is ported the system stays on Lv1 (h04E) — set TreasureChestLevel2 to flip it.
+local TREASURE_CHEST_LOOT = {
+    [FourCC('h04E')] = { Lv1Uncommon, Lv1Uncommon, Lv1Rare, Lv1Rare, Lv1Epic },
+    [FourCC('h05E')] = { Lv2Uncommon, Lv2Uncommon, Lv2Rare, Lv2Rare, Lv2Epic },
+}
+function RegisterTreasureChestDrop()
+    -- Accumulate on Player(9) deaths (skip the three corpse dummies) and spawn the chest.
+    local acc = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(acc, Player(9), EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(acc, Condition(function()
+        local id = GetUnitTypeId(GetDyingUnit())
+        return id ~= FourCC('e002') and id ~= FourCC('e003') and id ~= FourCC('e007')
+    end))
+    TriggerAddAction(acc, function()
+        if TreasureChestDrop < 300 then
+            TreasureChestDrop = TreasureChestDrop + GetRandomInt(0, 5) + 1
             return
         end
-        local trap = GetRandomInt(1, 4)
-        chestTrapText(loc, CHEST_TRAP_MSG[trap])
-        if trap == 1 then  -- Spike Trap: 200 dmg in r225
-            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[1])
-            UnitDamagePointLoc(d, 0, 225.0, loc, 200.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
-            TriggerSleepAction(3.0)
-            DestroyEffect(sfx)
-        elseif trap == 2 then  -- Needle Trap: 100 dmg in r450
-            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[2])
-            UnitDamagePointLoc(d, 0, 450.0, loc, 100.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
-            TriggerSleepAction(3.0)
-            DestroyEffect(sfx)
-        elseif trap == 3 then  -- Self Destruct: delayed 500 dmg in r350
-            UnitDamagePointLoc(d, 5.0, 350.0, loc, 500.0, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL)
-            TriggerSleepAction(5.0)
-            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[3])
-            TriggerSleepAction(3.0)
-            DestroyEffect(sfx)
-        else  -- Mana Shear: drain the opener's mana
-            local killer = GetKillingUnitBJ()
-            if killer then SetUnitManaPercentBJ(killer, 0.0) end
-            local sfx = AddSpecialEffectLocBJ(loc, CHEST_TRAP_SFX[4])
-            TriggerSleepAction(3.0)
-            DestroyEffect(sfx)
+        TreasureChestDrop = 0
+        local d = GetDyingUnit()
+        local x, y = GetUnitX(d), GetUnitY(d)
+        local chest = TreasureChestLevel2 and FourCC('h05E') or FourCC('h04E')
+        CreateUnit(Player(11), chest, x, y, bj_UNIT_FACING)
+        DisplayTextToForce(GetPlayersAll(), "Treasure Chest Spawn")
+        PingMinimap(x, y, 5.0)
+    end)
+
+    -- Killing the spawned chest -> tiered loot + possible trap.
+    local kill = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(kill, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(kill, Condition(function()
+        return TREASURE_CHEST_LOOT[GetUnitTypeId(GetDyingUnit())] ~= nil
+    end))
+    TriggerAddAction(kill, function()
+        local d = GetDyingUnit()
+        local loot = TREASURE_CHEST_LOOT[GetUnitTypeId(d)]
+        local loc = GetUnitLoc(d)
+        for _, p in ipairs(loot) do
+            CreateItemLoc(drawFrom(p), loc)
         end
+        springChestTrap(d, loc)
         RemoveLocation(loc)
     end)
 end
@@ -446,6 +501,26 @@ function DebugSpawnItem(arg1, arg2, x, y)
         if name == 'all' or name == nil or name == '' then return allDebugCodes() end
         return DEBUG_POOLS[name]
     end
+
+    -- `-item set` spawns one COMPLETE set (all its pieces) instead of a single piece;
+    -- `-item set <name>` spawns every set whose name contains <name>. (The piece-substring
+    -- behaviour stays available via `-item all <name>`.)
+    if arg1 == 'set' then
+        local function spawnSet(s)
+            for _, id in ipairs(s.pieceIds) do CreateItem(id, x, y) end
+        end
+        if arg2 and arg2 ~= '' then
+            local n = 0
+            for _, s in ipairs(SETS) do
+                if s.name:lower():find(arg2, 1, true) then spawnSet(s); n = n + 1 end
+            end
+            return n > 0 and (n .. " set(s) matching '" .. arg2 .. "'") or nil
+        end
+        local s = SETS[GetRandomInt(1, #SETS)]
+        spawnSet(s)
+        return "a full " .. s.name
+    end
+
     if arg2 and arg2 ~= '' then
         local search = resolve(arg1) or allDebugCodes()
         local n = 0

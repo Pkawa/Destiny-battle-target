@@ -890,8 +890,12 @@ local function setupLevel14()
     local function springTrap(rectKey, spawnsList)
         local r = rct[rectKey]
         EnumDestructablesInRect(r, nil, function() KillDestructable(GetEnumDestructable()) end)
+        -- Floor the difficulty at 1 for ambush scaling so a -goto 14 test (DM 0) still
+        -- springs the per-zone ambushes instead of near-empty traps (triage-3 #8; same
+        -- guard as Level 13). At a real difficulty (DM>=1) this is identical to the JASS.
+        local dm = math.max(1, DifficultyModifier)
         for _, s in ipairs(spawnsList) do
-            local count = s[1] + (s[3] or 0) * DifficultyModifier
+            local count = s[1] + (s[3] or 0) * dm
             if count > 0 then
                 local loc = GetRandomLocInRect(r)
                 CreateNUnitsAtLoc(count, FourCC(s[2]), P9, loc, bj_UNIT_FACING)
@@ -1020,6 +1024,14 @@ local function setupLevel14()
     onCaravanEnter('CaravanPathC', function()
         pathOn = false
         DisableTrigger(pathT)
+        -- The caravan has arrived at the temple — pin it in place for the boss fight so
+        -- it stops fleeing when the Tidedweller hits it (triage-3 #9). Move speed 0 keeps
+        -- it from being kited off; it still dies (caravan death = defeat) if left undefended.
+        local cHold = caravan()
+        if cHold then
+            SetUnitMoveSpeed(cHold, 0)
+            IssueImmediateOrderBJ(cHold, "holdposition")
+        end
         TriggerSleepAction(1.75)
         MusicOn = false
         PlaySoundBJ(snd.CreepAggroWhat1)
@@ -1936,5 +1948,63 @@ function RegisterLevelTriggers()
         RemoveLocation(loc)
         PlaySoundBJ(snd.HordeSound2)
         DisplayTimedTextToForce(GetPlayersAll(), 3.0, "|cffff0000Your town is under attack!|r")
+    end)
+
+    -- ─── Level 4 prisoner system (h006, Player 8) ──────────────────────────────
+    -- These three triggers are registered globally (as the original does) but only do
+    -- anything while prisoners exist, i.e. during Level 4. They are what makes the rescue
+    -- read correctly: the prisoners stream to the base, can't be slain by the party, and
+    -- announce a dying line when an attacker gets one. Without the nudge the survivors
+    -- were still scattered in their lanes at victory, so the militia they became marched
+    -- back out (triage-3 #3).
+
+    -- Prisoner Nudge (war3map.j 29460-29476): every 10s order all Player-8 prisoners
+    -- toward the base so they gather there before the rescue resolves.
+    local nudge = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(nudge, 10.0)
+    TriggerAddAction(nudge, function()
+        local g = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h006'))
+        ForGroup(g, function()
+            IssuePointOrderLoc(GetEnumUnit(), "move", GetRectCenter(rct.StartingPlayerArea))
+        end)
+        DestroyGroup(g)
+    end)
+
+    -- Cant Kill Prisoners (war3map.j 29437-29458): a non-enemy attacking a prisoner is
+    -- stopped and scolded, so the party can't fail the level by killing the captives.
+    local cantKill = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(cantKill, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(cantKill, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('h006')
+            and GetOwningPlayer(GetAttacker()) ~= P9
+    end))
+    TriggerAddAction(cantKill, function()
+        IssueImmediateOrderBJ(GetAttacker(), "stop")
+        DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(GetAttacker())),
+            "You're supposed to save them, not slay them!")
+    end)
+
+    -- Prisoner Dies (war3map.j 29899-29981): a dying prisoner pings the map and cries
+    -- out one of seven random death lines.
+    local prisonerDeath = {
+        "|cff32cd32Prisoner:|r Agh.. it.. hurts..!",
+        "|cff32cd32Prisoner:|r I don't... want.. to die....",
+        "|cff32cd32Prisoner:|r Is this... the end..?",
+        "|cff32cd32Prisoner:|r My love.. I only wanted to see your face one.. last...",
+        "|cff32cd32Prisoner:|r Darkness... closes in.. is this... death..?",
+        "|cff32cd32Prisoner:|r Ugh...avenge... me...!",
+        "|cff32cd32Prisoner:|r This can't be... how it all... ends...!",
+    }
+    local dies = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(dies, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(dies, Condition(function()
+        return GetUnitTypeId(GetDyingUnit()) == FourCC('h006')
+    end))
+    TriggerAddAction(dies, function()
+        PlaySoundBJ(snd.CreepAggroWhat1)
+        local loc = GetUnitLoc(GetDyingUnit())
+        PingMinimapLocForForce(GetPlayersAll(), loc, 1.0)
+        RemoveLocation(loc)
+        DisplayTimedTextToForce(GetPlayersAll(), 5.0, prisonerDeath[GetRandomInt(1, 7)])
     end)
 end

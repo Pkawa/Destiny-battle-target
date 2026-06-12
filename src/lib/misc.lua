@@ -429,6 +429,35 @@ local function registerRadley()
     end)
 end
 
+-- ── The Swallow's Anchor (war3map.j 32036-32083) ──────────────────────────────
+-- The Anchor item (I0C0) summons the player's own defence ship, the Swallow (h06L), at
+-- the dock when a hero picks it up; dropping the item dismisses the ship again. The ship
+-- is the dim-blue exempt unit the merchant-ship loop already skips.
+local function registerSwallowAnchor()
+    local theSwallow = nil
+
+    local pick = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(pick, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(pick, Condition(function()
+        return IsUnitType(GetManipulatingUnit(), UNIT_TYPE_HERO)
+            and GetItemTypeId(GetManipulatedItem()) == FourCC('I0C0')
+    end))
+    TriggerAddAction(pick, function()
+        local x, y = GetRectCenterX(rct.ShipDockArea), GetRectCenterY(rct.ShipDockArea)
+        theSwallow = CreateUnit(GetOwningPlayer(GetManipulatingUnit()), FourCC('h06L'), x, y, bj_UNIT_FACING)
+        SetUnitVertexColorBJ(theSwallow, 50.0, 50.0, 100.0, 50.0)
+    end)
+
+    local drop = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(drop, EVENT_PLAYER_UNIT_DROP_ITEM)
+    TriggerAddCondition(drop, Condition(function()
+        return GetItemTypeId(GetManipulatedItem()) == FourCC('I0C0')
+    end))
+    TriggerAddAction(drop, function()
+        if theSwallow then RemoveUnit(theSwallow); theSwallow = nil end
+    end)
+end
+
 function RegisterMiscTriggers()
     registerLevelUpFloaters()
     RegisterHeroDeathCries()
@@ -436,4 +465,5 @@ function RegisterMiscTriggers()
     registerMidas()
     registerShipWaypoints()
     registerRadley()
+    registerSwallowAnchor()
 end
