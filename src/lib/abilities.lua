@@ -832,6 +832,85 @@ local function setupCryptguard()
         EnableTrigger(makeT)
         VengefulSpiritLvl = VengefulSpiritLvl + 1
     end)
+
+    -- ── Haven (A0GK) — a channeled repel ward (Tranquility-based) ──────────────
+    -- While the Cryptguard channels, every non-hero enemy entering the defended area is blinked
+    -- back out to a random outer path (draining her mana per repel). Each rank cheapens the repel
+    -- and the channel itself drains 5 mana/s; it ends when she stops or runs dry.
+    local SPELL_SHIELD = "Abilities\\Spells\\Items\\SpellShieldAmulet\\SpellShieldCaster.mdl"
+    local havenAnim
+    local havenCaster
+    local TRANQUILITY = OrderId("tranquility")
+
+    -- Haven Channel: blink an intruder back out, drain the Cryptguard, then send it walking back.
+    local channelT = OnEnterRect(rct.AreaToDefend, function()
+        return GetOwningPlayer(GetEnteringUnit()) == P9
+            and not IsUnitType(GetEnteringUnit(), UNIT_TYPE_HERO)
+    end, function()
+        local intruder = GetEnteringUnit()
+        if havenAnim then DestroyEffect(havenAnim) end
+        if snd.HavenImpact then PlaySoundOnUnitBJ(snd.HavenImpact, 100, intruder) end
+        local areas = { rct.WestPathOutside, rct.NorthPathOutside1, rct.NorthPathOutside2, rct.EastPathOutside }
+        local loc = GetRandomLocInRect(areas[GetRandomInt(1, 4)])
+        SetUnitPositionLoc(intruder, loc)
+        RemoveLocation(loc)
+        havenAnim = AddSpecialEffectTarget(SPELL_SHIELD, intruder, "origin")
+        if havenCaster and GetUnitTypeId(havenCaster) ~= 0 then
+            SetUnitState(havenCaster, UNIT_STATE_MANA,
+                GetUnitState(havenCaster, UNIT_STATE_MANA) - HavenManaRepelCost)
+        end
+        TriggerSleepAction(2.0)
+        IssuePointOrder(intruder, "patrol",
+            GetRectCenterX(rct.EntranceToFortress), GetRectCenterY(rct.EntranceToFortress))
+    end)
+    DisableTrigger(channelT)
+
+    -- The per-second channel upkeep: drain 5 mana, end if she stopped channeling or ran dry.
+    local function havenTick(caster)
+        if not HavenIsOn then return end
+        if GetUnitTypeId(caster) == 0 or GetUnitCurrentOrder(caster) ~= TRANQUILITY then
+            DisplayCineFilterBJ(false)
+            HavenIsOn = false
+            DisableTrigger(channelT)
+            return
+        end
+        SetUnitState(caster, UNIT_STATE_MANA, GetUnitState(caster, UNIT_STATE_MANA) - 5.0)
+        if GetUnitState(caster, UNIT_STATE_MANA) < 5.0 then
+            DisplayCineFilterBJ(false)
+            IssueImmediateOrder(caster, "stop")
+            HavenIsOn = false
+            DisableTrigger(channelT)
+            return
+        end
+        After(1.0, function() havenTick(caster) end)
+    end
+
+    -- Haven Learn (A0GK): set the repel destinations (no-op here — read live) + cheapen the repel.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0GK')
+    end, function()
+        HavenManaRepelCost = HavenManaRepelCost - 5.0
+    end)
+
+    -- Haven Cast (A0GK, channel start): raise the ward + begin the upkeep loop.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CHANNEL, function()
+        return GetSpellAbilityId() == FourCC('A0GK')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        havenCaster = caster
+        if not HavenIsOn then
+            DisplayTimedTextToForce(GetPlayersAll(), 8.0,
+                GetPlayerName(GetOwningPlayer(caster)) .. "  casts |cff995500Haven|r!")
+            CinematicFilterGenericBJ(8.0, BLEND_MODE_BLEND,
+                "ReplaceableTextures\\CameraMasks\\White_mask.blp",
+                100.0, 0.0, 100.0, 70.0, 100.0, 0.0, 100.0, 70.0)
+            DisplayCineFilterBJ(true)
+            if snd.HavenStart then PlaySoundBJ(snd.HavenStart) end
+            HavenIsOn = true
+        end
+        EnableTrigger(channelT)
+        After(1.0, function() havenTick(caster) end)
+    end)
 end
 
 function RegisterAbilityTriggers()
