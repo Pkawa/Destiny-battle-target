@@ -1924,6 +1924,214 @@ local function setupClericOfTheSmallFolk()
     end)
 end
 
+-- ══ Disciple of Grace (H01N) — war3map.j 39344-39622 ═══════════════════════════
+-- A support-priest. Charm (A038): the charm ability is object-data; this trigger handles the
+-- side-effect — a charmed structure is bounced back to the enemy ("can't charm that"), a charmed
+-- unit just flashes "Charm!". Sanctuary (A03A): a passive — each rank, +5% that an attacker of the
+-- Disciple is frozen (timescale 0 + paused) for 6s. Death Ward (A03B): wards a target for
+-- DeathWardDuration seconds; if it dies in that window it is revived at the corpse (100% HP / 50%
+-- mana). Mastery of Grace (A03C): boosts all three + enables the Mass Res. Mistress of Grace Mass
+-- Res (A039): +20 mana to every allied unit within 1400 of the caster.
+
+local DISCIPLE = FourCC('H01N')
+local SANCTUARY_SFX = "Abilities\\Spells\\Orc\\Purge\\PurgeBuffTarget.mdl"
+
+local function setupDiscipleOfGrace()
+    -- Charm Person Learn (A038): +1 to the (display) count of units charmable at once.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A038')
+    end, function()
+        TotalCharmAtOnce = TotalCharmAtOnce + 1
+    end)
+
+    -- Charm (cast A038): the charm itself is object-data. A charmed STRUCTURE is reverted to the
+    -- enemy with a failure message; a charmed unit just gets a "Charm!" flash (war3map.j 39382).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A038')
+    end, function()
+        local target = GetSpellTargetUnit()
+        if IsUnitType(target, UNIT_TYPE_STRUCTURE) then
+            SetUnitOwner(target, P9, true)
+            DisplayTimedTextToPlayer(GetOwningPlayer(GetSpellAbilityUnit()), 0, 0, 8.0,
+                "Charm failed.  You cannot charm that unit.")
+        else
+            FloatText(target, "Charm!", 0, 10, 100, 3.0)
+        end
+    end)
+
+    -- Sanctuary Chance (an attacker hits the Disciple, gated until learned): disable self, roll the
+    -- chance, and on a hit freeze the attacker for 6s (timescale 0 + paused) with a Purge flash.
+    local sancSFX
+    local sancT
+    sancT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == DISCIPLE
+    end, function()
+        DisableTrigger(sancT)
+        if GetRandomInt(1, 100) <= SanctuaryChance then
+            local attacker = GetAttacker()
+            FloatText(GetAttackedUnitBJ(), "*Sanctuary!*", 100, 25, 100, 1.5)
+            SetUnitTimeScalePercent(attacker, 0.0)
+            if sancSFX then DestroyEffect(sancSFX) end
+            sancSFX = AddSpecialEffectTarget(SANCTUARY_SFX, attacker, "origin")
+            PauseUnit(attacker, true)
+            TriggerSleepAction(6.0)
+            SetUnitTimeScalePercent(attacker, 100.0)
+            PauseUnit(attacker, false)
+            if sancSFX then DestroyEffect(sancSFX); sancSFX = nil end  -- freed once the freeze ends
+        end
+        EnableTrigger(sancT)
+    end)
+    DisableTrigger(sancT)
+
+    -- Sanctuary Learn (A03A): +5% freeze chance, arm the passive.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A03A')
+    end, function()
+        SanctuaryChance = SanctuaryChance + 5
+        EnableTrigger(sancT)
+    end)
+
+    -- Death Ward Learn (A03B): +5s ward duration per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A03B')
+    end, function()
+        DeathWardDuration = DeathWardDuration + 5
+    end)
+
+    -- Death Ward Effect (DEATH of the warded target, gated): revive it at the corpse 5s later at
+    -- 100% HP / 50% mana. Both JASS branches do the same revive; the else-branch also flags the
+    -- Grace achievement (DiscipleBonusB) — preserved.
+    local wardEffT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetDyingUnit() == DeathWardedTarget
+    end, function()
+        local dead = GetDyingUnit()
+        local x, y = GetUnitX(dead), GetUnitY(dead)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(GetOwningPlayer(dead)) .. " |cff995500Is protected from death by Death Ward...|r")
+        if not GraceBonusObtained then DiscipleBonusB = true end
+        TriggerSleepAction(5.0)
+        ReviveHero(DeathWardedTarget, x, y, true)
+        SetUnitLifePercentBJ(DeathWardedTarget, 100.0)
+        SetUnitManaPercentBJ(DeathWardedTarget, 50.0)
+        if GetLocalPlayer() == GetOwningPlayer(dead) then PanCameraToTimed(x, y, 0) end  -- local-only
+        DisableTrigger(GetTriggeringTrigger())
+    end)
+    DisableTrigger(wardEffT)
+
+    -- Death Ward (cast A03B): ward the target for DeathWardDuration seconds.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A03B')
+    end, function()
+        DisciplePlayer = GetOwningPlayer(GetSpellAbilityUnit())
+        DeathWardedTarget = GetSpellTargetUnit()
+        EnableTrigger(wardEffT)
+        FloatText(DeathWardedTarget, "Death Ward!", 60, 100, 0, 3.0)
+        TriggerSleepAction(DeathWardDuration)
+        DisableTrigger(wardEffT)
+    end)
+
+    -- Mistress of Grace Mass Res (cast A039, gated): +20 mana to every allied (non-P9) unit
+    -- within 1400 of the caster.
+    local massResT = OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A039')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), 1400.0, function()
+            return GetOwningPlayer(GetFilterUnit()) ~= P9
+        end, function()
+            local u = GetEnumUnit()
+            SetUnitManaBJ(u, GetUnitState(u, UNIT_STATE_MANA) + 20.0)
+        end)
+    end)
+    DisableTrigger(massResT)
+
+    -- Mastery of Grace Learn (A03C): boost Death Ward + Sanctuary + Charm, enable the Mass Res.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A03C')
+    end, function()
+        DeathWardDuration = DeathWardDuration + 10
+        SanctuaryChance = SanctuaryChance + 15
+        TotalCharmAtOnce = TotalCharmAtOnce + 3
+        EnableTrigger(massResT)
+    end)
+end
+
+-- ══ Dwarven Axemaster (H007) — war3map.j 39624-40445 ═══════════════════════════
+-- A last-ditch berserker. Great Sunder (passive, learn A00E): once the Axemaster is level 18+,
+-- every kill rends nearby enemies for 10% of their current HP. Last Stand (A034): on cast, heal a
+-- rank-scaling fraction of max HP, run a visible ~25s countdown, then pay a rank-scaling self-damage
+-- cost at the end. The buff itself (the protected window) is the ability's object data.
+
+local AXEMASTER = FourCC('H007')
+-- Last Stand by rank → { heal fraction of max HP, end-of-countdown self-damage fraction }
+-- (war3map.j 39753/39880, 39888/40013, ... — divisors 4/2.5/1.66/1.25 heal, 10/6.5/5/4 cost).
+local LAST_STAND = {
+    { heal = 4.0,  cost = 10.0 },
+    { heal = 2.5,  cost = 6.5 },
+    { heal = 1.66, cost = 5.0 },
+    { heal = 1.25, cost = 4.0 },
+}
+
+-- Last Stand resolution: heal now, show a (25)..(1) countdown one tag/second, then pay the cost.
+-- (Collapses the JASS's 26 hardcoded "(n)" text tags into a live countdown — same 26s timing.)
+local function lastStandResolve(hero, spec)
+    local maxLife = GetUnitState(hero, UNIT_STATE_MAX_LIFE)
+    SetUnitLifeBJ(hero, GetUnitState(hero, UNIT_STATE_LIFE) + maxLife / spec.heal)
+    for n = 25, 1, -1 do
+        TriggerSleepAction(1.0)
+        if GetUnitTypeId(hero) == 0 then return end
+        FloatText(hero, "(" .. tostring(n) .. ")", 100, 100, 0, 1.0)
+    end
+    TriggerSleepAction(1.0)
+    if GetUnitTypeId(hero) == 0 then return end
+    SetUnitLifeBJ(hero, GetUnitState(hero, UNIT_STATE_LIFE)
+        - GetUnitState(hero, UNIT_STATE_MAX_LIFE) / spec.cost)
+end
+
+local function setupDwarvenAxemaster()
+    -- Great Sunder (DEATH, killer = level-18+ Axemaster, gated until A00E learned): rend every enemy
+    -- within 180 of the corpse for 10% of its current HP.
+    local sunderT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetKillingUnit()) == AXEMASTER and GetHeroLevel(GetKillingUnit()) >= 18
+    end, function()
+        local dead = GetDyingUnit()
+        if snd.StampedeHit1 then PlaySoundOnUnitBJ(snd.StampedeHit1, 100, dead) end
+        ForUnitsInRange(GetUnitX(dead), GetUnitY(dead), 180.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            local u = GetEnumUnit()
+            SetUnitLifeBJ(u, GetUnitState(u, UNIT_STATE_LIFE) - GetUnitState(u, UNIT_STATE_LIFE) / 10.0)
+        end)
+        local fx = AddSpecialEffectTarget(
+            "Objects\\Spawnmodels\\Human\\HumanBlood\\BloodElfSpellThiefBlood.mdl", dead, "origin")
+        After(1.0, function() DestroyEffect(fx) end)
+    end)
+    DisableTrigger(sunderT)
+
+    -- Great Sunder Research (learn A00E): arm the passive.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A00E')
+    end, function()
+        EnableTrigger(sunderT)
+    end)
+
+    -- Last Stand Learn (A034): +1 rank (heal/cost tier).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A034')
+    end, function()
+        LastStand = LastStand + 1
+    end)
+
+    -- Last Stand Use (cast A034): resolve the rank's heal + countdown + cost. (The JASS's 5th branch
+    -- repeats the rank-4 condition and is dead code — dropped.)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A034')
+    end, function()
+        local spec = LAST_STAND[LastStand]
+        if spec then lastStandResolve(GetSpellAbilityUnit(), spec) end
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1945,4 +2153,6 @@ function RegisterAbilityTriggers()
     setupClericOfTheSmallFolk()
     setupClericOfOrder()
     setupClericOfElvenWord()
+    setupDiscipleOfGrace()
+    setupDwarvenAxemaster()
 end

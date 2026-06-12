@@ -56,6 +56,7 @@ local HELP = {
     "-wave : next waves  |  -goto N : jump to level N  |  -kill : clear wave",
     "-lvl N : set hero level  |  -gold N : give gold  |  -tp : hero to cursor",
     "-item POOL [name] : spawn loot — unc/rare/epic/arti/scroll/tarot/set/all (name = filter)",
+    "-item treats : spawn Radley's Treats (the pup follows whoever holds them)",
     "-revealmap : reveal whole map  |  -revive : revive your dead hero(es)",
     "-repick : re-pick hero+feat  |  -defeat : lose  |  -megaboss : launch Megaboss 1",
 }
@@ -172,7 +173,7 @@ function RegisterDebugCommands()
         if not h then return end
         local name = DebugSpawnItem(pool, sub, GetUnitX(h), GetUnitY(h))
         tell(GetTriggerPlayer(), name and ("[debug] spawned " .. name)
-            or "[debug] usage: -item unc|rare|epic|arti|scroll|tarot|set|all [name]")
+            or "[debug] usage: -item unc|rare|epic|arti|scroll|tarot|set|all|treats [name]")
     end
     cmd("-item", false, gated(function() spawnLoot(argTwo()) end))
     cmd("-mythic", true, gated(function() spawnLoot("artifact") end))

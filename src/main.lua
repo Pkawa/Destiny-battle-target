@@ -96,6 +96,9 @@ RegisterSellTriggers()
 RegisterItemShopTriggers()
 RegisterSupplyStockingTriggers()
 
+-- Register the buildable Auction House (set-item market, 180s restock — economy/Economy.md §1)
+RegisterAuctionHouseTriggers()
+
 -- Register the research-upgrade dispatch (Training XP, Princess upgrades, tower upgrades,
 -- Seafaring; researched at the per-player h00Z buildings — progression/Training.md)
 RegisterResearchTriggers()

@@ -57,6 +57,23 @@ local Lv2Artifact = pool{
     'I04I','I06D','I01M','I024',
 }
 
+-- Set-item pools the Auction House stocks (war3map.j 32848-32891 / 33554+). 0-indexed to
+-- match the original's GetRandomInt(0, Total) inclusive draw. Totals (war3map.j 2699-2702):
+-- Lv1 rare = 11, Lv1 epic = 5, Lv2 rare = 8, Lv2 epic = 5.
+local Lv1RareSetItem = pool{
+    'I043','I044','I045','I047','I048','I049','I04D','I04E','I04B','I0CA','I0CB','I0CD',
+}
+local Lv1EpicSetItem = pool{ 'I04G','I04F','I05B','I05C','I05F','I05E' }
+local Lv2RareSetItem = pool{ 'I092','I091','I093','I0AB','I0A9','I0AA','I0B3','I0B2','I0B1' }
+-- Faithful quirk: the original sets only indices 1-4 yet TotalEpicSetItems = 5, so a
+-- GetRandomInt(0,5) draw lands on an empty slot (0 or 5) ~1/3 of the time and stocks nothing.
+-- Preserved (guarded against nil where it's drawn).
+local Lv2EpicSetItem = { max = 5 }
+Lv2EpicSetItem[1] = FourCC('I04X')
+Lv2EpicSetItem[2] = FourCC('I050')
+Lv2EpicSetItem[3] = FourCC('I0BC')
+Lv2EpicSetItem[4] = FourCC('I0BB')
+
 local function drawFrom(p)
     return p[GetRandomInt(0, p.max)]
 end
@@ -470,6 +487,89 @@ function RegisterPurchaseTriggers()
     end)
 end
 
+-- ── Auction House (war3map.j 6283-6375, 10066-10152; economy/Economy.md §1) ──
+-- A buildable set-item market. Buying the token 'I0BF' from a base shop transforms that shop
+-- into a Tier-1 Auction House (n00X); 'I0BG' upgrades it to Tier-2 (n00Y). Each tier stocks
+-- unique set items (2 rare + 1 epic per cycle) and rotates its stock every 180s. Buying an
+-- item from the AH removes it from stock, so every listing is one-of-a-kind.
+
+-- Run fn(unit) for every unit of the given type id on the map; cleans up the enum group.
+local function forUnitsOfType(unitid, fn)
+    local g = GetUnitsOfTypeIdAll(unitid)
+    ForGroup(g, function() fn(GetEnumUnit()) end)
+    DestroyGroup(g)
+end
+
+-- Stock one cycle onto an AH unit: 2 random rare + 1 random epic set item (war3map.j 6287-6290).
+local function stockAH(unit, rarePool, epicPool)
+    AddItemToStock(unit, drawFrom(rarePool), 1, 1)
+    AddItemToStock(unit, drawFrom(rarePool), 1, 1)
+    local epic = drawFrom(epicPool)
+    if epic then AddItemToStock(unit, epic, 1, 1) end  -- Lv2 epic pool has empty slots (faithful)
+end
+
+-- Rotate an AH unit's stock: drop 6 random level-1 items, then add a fresh cycle (war3map.j 6325-6334).
+local function restockAH(unit, rarePool, epicPool)
+    for _ = 1, 6 do RemoveItemFromStock(unit, ChooseRandomItem(1)) end
+    stockAH(unit, rarePool, epicPool)
+end
+
+function RegisterAuctionHouseTriggers()
+    local AH1, AH2 = FourCC('n00X'), FourCC('n00Y')
+
+    -- 180s stock rotations, one per tier; start disabled, armed when an AH of that tier is built.
+    -- Tier-1 also restocks on Player(0)'s "-ah" debug chat (war3map.j 6345).
+    local rotate1 = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(rotate1, 180.0)
+    TriggerRegisterPlayerChatEvent(rotate1, Player(0), "-ah", true)
+    TriggerAddAction(rotate1, function()
+        forUnitsOfType(AH1, function(u) restockAH(u, Lv1RareSetItem, Lv1EpicSetItem) end)
+    end)
+    DisableTrigger(rotate1)
+
+    local rotate2 = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(rotate2, 180.0)
+    TriggerAddAction(rotate2, function()
+        forUnitsOfType(AH2, function(u) restockAH(u, Lv2RareSetItem, Lv2EpicSetItem) end)
+    end)
+    DisableTrigger(rotate2)
+
+    -- Build Tier-1: buy 'I0BF' → the selling building becomes n00X; stock every n00X + arm rotation.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SELL_ITEM, function()
+        return GetItemTypeId(GetSoldItem()) == FourCC('I0BF')
+    end, function()
+        ReplaceUnitBJ(GetSellingUnit(), AH1, bj_UNIT_STATE_METHOD_DEFAULTS)
+        RemoveItem(GetSoldItem())
+        PlaySoundBJ(snd.AllianceSound)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(GetOwningPlayer(GetBuyingUnit())) .. "|cff00ff00 has built an Auction House!|r")
+        EnableTrigger(rotate1)
+        forUnitsOfType(AH1, function(u) stockAH(u, Lv1RareSetItem, Lv1EpicSetItem) end)
+    end)
+
+    -- Upgrade to Tier-2: buy 'I0BG' → n00Y; stock every n00Y + arm the Lv2 rotation.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SELL_ITEM, function()
+        return GetItemTypeId(GetSoldItem()) == FourCC('I0BG')
+    end, function()
+        ReplaceUnitBJ(GetSellingUnit(), AH2, bj_UNIT_STATE_METHOD_DEFAULTS)
+        RemoveItem(GetSoldItem())
+        PlaySoundBJ(snd.AllianceSound)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(GetOwningPlayer(GetBuyingUnit())) .. "|cff00ff00 has upgraded an Auction House!|r")
+        EnableTrigger(rotate2)
+        forUnitsOfType(AH2, function(u) stockAH(u, Lv2RareSetItem, Lv2EpicSetItem) end)
+    end)
+
+    -- Buying an item from an AH unit removes that item from its stock (each listing is unique).
+    -- The Lv2 upgrade token 'I0BG' is exempt so upgrading doesn't strip itself (war3map.j 10132-10143).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SELL_ITEM, function()
+        local seller = GetUnitTypeId(GetSellingUnit())
+        return (seller == AH1 or seller == AH2) and GetItemTypeId(GetSoldItem()) ~= FourCC('I0BG')
+    end, function()
+        RemoveItemFromStock(GetSellingUnit(), GetItemTypeId(GetSoldItem()))
+    end)
+end
+
 -- Debug helper: drop a random Lv1 item of the given rarity at (x,y). Returns its name or nil.
 -- Flatten a 0-indexed rarity pool to a plain list of FourCC ids.
 local function poolList(p)
@@ -514,6 +614,12 @@ function DebugSpawnItem(arg1, arg2, x, y)
         if name == 'scroll' or name == 'scrolls' then return DEBUG_SCROLL_CODES end
         if name == 'all' or name == nil or name == '' then return allDebugCodes() end
         return DEBUG_POOLS[name]
+    end
+
+    -- `-item treats` spawns Radley's Treats (I0BY) — the pup follows whoever holds it
+    -- (see misc.lua registerRadley). Not part of any loot pool, so it's a special case.
+    if arg1 == 'treats' or arg1 == 'treat' then
+        return GetItemName(CreateItem(FourCC('I0BY'), x, y)) or "Treats"
     end
 
     -- `-item set` spawns one COMPLETE set (all its pieces) instead of a single piece;

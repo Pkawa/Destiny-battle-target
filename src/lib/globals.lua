@@ -179,6 +179,8 @@ LevelDiffModifier = 0
 -- Misc ability values (non-zero at init)
 TotalCharmAtOnce        = 2
 DeathWardDuration       = 5
+SanctuaryChance         = 0    -- Disciple of Grace: Sanctuary freeze chance (+5/rank)
+LastStand               = 0    -- Dwarven Axemaster: Last Stand rank (heal/cost tier)
 ChaosChord              = 8
 AssaultChance           = 5
 FlameWreathDamage       = 25
