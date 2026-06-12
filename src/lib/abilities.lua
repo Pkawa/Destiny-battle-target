@@ -1660,6 +1660,68 @@ local function setupSwashbuckler()
     end)
 end
 
+-- ══ Cleric of Elven Word (H02C) — war3map.j 38386-38498 ═══════════════════════════════════════════
+-- A healer-priest. Replenish (A05D): a rank-scaling single-target heal. Elven Rebirth (ult A05E):
+-- a passive that revives any allied hero that dies near a living Cleric of Elven Word, at base, at
+-- 10% HP/mana, then goes on cooldown.
+
+local CLERIC_ELVENWORD = FourCC('H02C')
+-- Replenish flat heal by rank (JASS ReplenishLevel[1..5]).
+local REPLENISH_HEAL = { 60.0, 100.0, 160.0, 250.0, 325.0 }
+
+local function setupClericOfElvenWord()
+    -- Replenish Learn (A05D): +1 rank (heal tier).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A05D')
+    end, function()
+        ReplenishLearn = ReplenishLearn + 1
+    end)
+
+    -- Replenish (cast A05D): "*Replenish!*" text tag + heal the target by the rank's flat amount.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A05D')
+    end, function()
+        local t = GetSpellTargetUnit()
+        local heal = REPLENISH_HEAL[ReplenishLearn]
+        if not t or not heal then return end
+        FloatText(t, "*Replenish!*", 0, 100, 0, 3.0)
+        SetUnitState(t, UNIT_STATE_LIFE, GetUnitState(t, UNIT_STATE_LIFE) + heal)
+    end)
+
+    -- Elven Rebirth 2 (UNIT_DEATH, disabled until A05E learned): if exactly one living Cleric of
+    -- Elven Word is within 400 of a dying allied hero, revive it at base at 10% HP/mana, then cooldown.
+    local rebirthT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        local d = GetDyingUnit()
+        return GetOwningPlayer(d) ~= P9 and GetOwningPlayer(d) ~= P8
+            and IsUnitType(d, UNIT_TYPE_HERO)
+            and CountInRange(GetUnitX(d), GetUnitY(d), 400.0, function()
+                return GetUnitTypeId(GetFilterUnit()) == CLERIC_ELVENWORD
+            end) == 1
+    end, function()
+        local hero = GetDyingUnit()
+        DisableTrigger(GetTriggeringTrigger())
+        PlaySoundBJ(snd.RestorationPotion)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(GetOwningPlayer(hero)) ..
+            " |cff995500feels the essence of the Cleric of Elven Word's Enchantment taking hold...|r")
+        TriggerSleepAction(4.0)
+        ReviveHero(hero, GetRectCenterX(rct.StartingPlayerArea), GetRectCenterY(rct.StartingPlayerArea), true)
+        SetUnitLifePercentBJ(hero, 10.0)
+        SetUnitManaPercentBJ(hero, 10.0)
+        TriggerSleepAction(ElvenRebirthCooldown)
+        EnableTrigger(GetTriggeringTrigger())
+    end)
+    DisableTrigger(rebirthT)
+
+    -- Elven Rebirth Learn (A05E): −2s cooldown per rank, arm the passive.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A05E')
+    end, function()
+        ElvenRebirthCooldown = ElvenRebirthCooldown - 2.0
+        EnableTrigger(rebirthT)
+    end)
+end
+
 -- ══ Cleric of Order (H001) — war3map.j 38500-38776 ════════════════════════════════════════════════
 -- A controller-priest. Symbol of Order (A001): cosmetic mark on the target. Inversion (A003): drains
 -- nearby enemies that are healthier than the cleric down toward her own HP%, capped per rank.
@@ -1882,4 +1944,5 @@ function RegisterAbilityTriggers()
     setupSwashbuckler()
     setupClericOfTheSmallFolk()
     setupClericOfOrder()
+    setupClericOfElvenWord()
 end

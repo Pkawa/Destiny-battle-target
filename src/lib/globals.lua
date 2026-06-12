@@ -405,6 +405,7 @@ ClericOfTheSmallFolk           = nil -- the Cleric of the Small Folk (H003) hero
 LuckEffect                     = 0   -- last Flip a Coin (A009) outcome roll (1–7)
 InversionSkillRank             = 0   -- Cleric of Order Inversion (A003) rank
 InversionMaxHealth             = 0.0 -- Inversion: max %HP an enemy can be drained toward the caster (25/33/50)
+ReplenishLearn                 = 0   -- Cleric of Elven Word Replenish (A05D) rank → heal amount tier
 SolStrike                      = nil -- Sun Soul Initiate charging Sol Strike (the casting unit)
 SolStrikeAttacks               = 0   -- attacks landed since Sol Strike was cast
 SolStrikeTotalAttacks          = 0   -- attacks needed to discharge Sol Strike (+1/rank)
