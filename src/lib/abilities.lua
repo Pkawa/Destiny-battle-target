@@ -1128,6 +1128,151 @@ local function setupRockfighter()
     end)
 end
 
+-- ══ Tundra Barbarian (H03A) — war3map.j 45903-46315 ════════════════════════════
+-- A frost berserker. Tundra Strike (A0BK): hurls a rank-scaling volley of ice shards that fly
+-- outward from him. Spirit Wolf (A0BY): summons a totem-bound wolf that can't stray far from its
+-- spirit totem (and all wolves vanish if the totem dies). Blood Feast (A0C0): each of his kills
+-- heals him a % of max HP. Wolves/Fenrir get an ethereal tint when they spawn.
+
+local TUNDRA_SHARD = FourCC('e014')
+local WOLF_ETHEREAL_SFX = "Abilities\\Weapons\\ZigguratMissile\\ZigguratMissile.mdl"
+-- Spirit Wolf: rank → summoned wolf + the spirit totem it binds to (JASS 46062-46075).
+local TOTEMIC_WOLF = { FourCC('h03B'), FourCC('h03D'), FourCC('h03E'), FourCC('h03F'), FourCC('h03F') }
+local SPIRIT_TOTEM = { FourCC('o008'), FourCC('o009'), FourCC('o00A'), FourCC('o007'), FourCC('o007') }
+local WOLF_TYPE_LIST = { FourCC('h03B'), FourCC('h03D'), FourCC('h03E'), FourCC('h03F') }
+local WOLF_TYPES = {}
+for _, c in ipairs(WOLF_TYPE_LIST) do WOLF_TYPES[c] = true end
+local TOTEM_TYPES = {}
+for _, c in ipairs({ FourCC('o008'), FourCC('o009'), FourCC('o00A'), FourCC('o007') }) do
+    TOTEM_TYPES[c] = true
+end
+
+-- One Tundra Strike volley: `count` shards at (tx,ty), each flung 5000 outward from the caster
+-- in its own random heading, cleared after a random delay.
+local function tundraVolley(caster, tx, ty, count, minD, maxD)
+    if snd.FrostNovaTarget1 then PlaySoundOnUnitBJ(snd.FrostNovaTarget1, 100, caster) end
+    local owner = GetOwningPlayer(caster)
+    local cx, cy = GetUnitX(caster), GetUnitY(caster)
+    local shards = {}
+    for _ = 1, count do
+        local s = CreateUnit(owner, TUNDRA_SHARD, tx, ty, GetRandomDirectionDeg())
+        local rad = GetUnitFacing(s) * DEG2RAD
+        IssuePointOrder(s, "move", cx + 5000.0 * math.cos(rad), cy + 5000.0 * math.sin(rad))
+        shards[#shards + 1] = s
+    end
+    TriggerSleepAction(GetRandomReal(minD, maxD))
+    for _, s in ipairs(shards) do
+        if GetUnitTypeId(s) ~= 0 then KillUnit(s) end
+    end
+end
+
+local function setupTundraBarbarian()
+    -- Tundra Strike Learn (A0BK): +1 rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0BK')
+    end, function()
+        TundraStrikeRank = TundraStrikeRank + 1
+    end)
+
+    -- Tundra Strike Use (cast A0BK): rank-gated volleys — 5 @r3, 9 @r≥4, +13 @r≥5 (the original
+    -- runs both the ≥4 and ≥5 blocks at rank 5, two bursts).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0BK')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local tx, ty = GetSpellTargetX(), GetSpellTargetY()
+        if TundraStrikeRank == 3 then
+            tundraVolley(caster, tx, ty, 5, 2.0, 4.0)
+            return
+        end
+        if TundraStrikeRank >= 4 then tundraVolley(caster, tx, ty, 9, 2.0, 4.0) end
+        if TundraStrikeRank >= 5 then tundraVolley(caster, tx, ty, 13, 2.0, 6.0) end
+    end)
+
+    -- Spirit Wolf Learn (A0BY): +1 rank (selects the wolf + totem tier).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0BY')
+    end, function()
+        TotemicSpiritRank = TotemicSpiritRank + 1
+    end)
+
+    -- Spirit Wolf Cast (A0BY): summon the rank's wolf at the target; bind it to its spirit totem.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0BY')
+    end, function()
+        local wolf = TOTEMIC_WOLF[TotemicSpiritRank]
+        if not wolf then return end
+        CreateUnit(GetOwningPlayer(GetSpellAbilityUnit()), wolf,
+            GetSpellTargetX(), GetSpellTargetY(), bj_UNIT_FACING)
+        TriggerSleepAction(1.0)
+        local g = GetUnitsOfTypeIdAll(SPIRIT_TOTEM[TotemicSpiritRank])
+        CurrentTotemicSpirit = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+    end)
+
+    -- Spirit Wolf Disperse (DEATH of a spirit totem): all summoned wolves vanish.
+    OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return TOTEM_TYPES[GetUnitTypeId(GetDyingUnit())] == true
+    end, function()
+        for _, code in ipairs(WOLF_TYPE_LIST) do
+            local g = GetUnitsOfTypeIdAll(code)
+            ForGroup(g, function() RemoveUnit(GetEnumUnit()) end)
+            DestroyGroup(g)
+        end
+    end)
+
+    -- Wolf Ethereal (a wolf spawns): ghostly tint + ziggurat-missile glow.
+    OnEnterRect(GetPlayableMapRect(), function()
+        return WOLF_TYPES[GetUnitTypeId(GetEnteringUnit())] == true
+    end, function()
+        local w = GetEnteringUnit()
+        SetUnitVertexColorBJ(w, 60.0, 100, 100, 50.0)
+        AddSpecialEffectTarget(WOLF_ETHEREAL_SFX, w, "origin")
+    end)
+
+    -- Wolf Wander (a wolf is attacked while >300×rank from its totem): leash it back to the totem.
+    OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        if not (WOLF_TYPES[GetUnitTypeId(GetAttacker())] == true) then return false end
+        if not (CurrentTotemicSpirit and GetUnitTypeId(CurrentTotemicSpirit) ~= 0) then return false end
+        local dx = GetUnitX(GetAttacker()) - GetUnitX(CurrentTotemicSpirit)
+        local dy = GetUnitY(GetAttacker()) - GetUnitY(CurrentTotemicSpirit)
+        local leash = 300.0 * TotemicSpiritRank
+        return dx * dx + dy * dy >= leash * leash
+    end, function()
+        SetUnitPosition(GetAttacker(),
+            GetUnitX(CurrentTotemicSpirit), GetUnitY(CurrentTotemicSpirit))
+    end)
+
+    -- Fenrir Ethereal (the ultimate wolf h03G spawns): its own ghostly tint + glow.
+    OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == FourCC('h03G')
+    end, function()
+        local f = GetEnteringUnit()
+        SetUnitVertexColorBJ(f, 30.0, 0.60, 100, 50.0)
+        AddSpecialEffectTarget(WOLF_ETHEREAL_SFX, f, "origin")
+    end)
+
+    -- Blood Feast Kill (a H03A kills something): blood splatter + heal him BloodFeast% max HP.
+    local bloodFeastT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetKillingUnit()) == FourCC('H03A')
+    end, function()
+        DestroyEffect(AddSpecialEffectTarget(
+            "Objects\\Spawnmodels\\Other\\HumanBloodCinematicEffect\\HumanBloodCinematicEffect.mdl",
+            GetDyingUnit(), "overhead"))
+        local killer = GetKillingUnit()
+        SetUnitLifePercentBJ(killer, GetUnitLifePercent(killer) + BloodFeast)
+    end)
+    DisableTrigger(bloodFeastT)
+
+    -- Blood Feast Learn (A0C0): arm the kill-heal + +4% per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0C0')
+    end, function()
+        EnableTrigger(bloodFeastT)
+        BloodFeast = BloodFeast + 4.0
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1141,4 +1286,5 @@ function RegisterAbilityTriggers()
     setupCryptguard()
     setupPaladin()
     setupRockfighter()
+    setupTundraBarbarian()
 end
