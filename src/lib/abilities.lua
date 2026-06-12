@@ -1009,6 +1009,125 @@ local function setupPaladin()
     end)
 end
 
+-- ══ Dwarven Rockfighter (H01M) — war3map.j 40450-40661 ═════════════════════════
+-- An earth-shaking brawler. Intimidating Shout (A035): nearby enemies panic and flee to random
+-- map points for ~8s, then resume marching on the base (+ arms the Enemy Nudge herder). Cave In
+-- (A0I1): a cavern-dust visual over the channel. Crushing Slam (A0I2): a ground-pound that shoves
+-- every enemy within 350 violently outward.
+
+-- Order each unit in a group to bolt to a random spot on the map (the "fear" scatter).
+local function scatterGroup(grp)
+    ForGroup(grp, function()
+        local loc = GetRandomLocInRect(GetPlayableMapRect())
+        IssuePointOrder(GetEnumUnit(), "move", GetLocationX(loc), GetLocationY(loc))
+        RemoveLocation(loc)
+    end)
+end
+
+-- Crushing Slam knockback: shove one victim ~8/0.05s outward (opposite its facing) for 40 ticks.
+local function crushKnockback(caster, victim)
+    local steps = 0
+    Every(0.05, function()
+        steps = steps + 1
+        if steps > 40 or GetUnitTypeId(victim) == 0 then return true end
+        local cx, cy = GetUnitX(caster), GetUnitY(caster)
+        local dx, dy = GetUnitX(victim) - cx, GetUnitY(victim) - cy
+        local dist = math.sqrt(dx * dx + dy * dy) + 8.0
+        local ang = (GetUnitFacing(victim) + 180.0) * DEG2RAD
+        SetUnitPosition(victim, cx + dist * math.cos(ang), cy + dist * math.sin(ang))
+        return false
+    end)
+end
+
+local function setupRockfighter()
+    -- Enemy Nudge (war3map.j 29478): every 30s herd all P9 enemies onward — game-area units patrol
+    -- the fortress entrance, castle-area units patrol the prince. Armed by Intimidating Shout.
+    local nudgeT = CreateTrigger()
+    DisableTrigger(nudgeT)
+    TriggerRegisterTimerEventPeriodic(nudgeT, 30.0)
+    TriggerAddAction(nudgeT, function()
+        local g1 = GetUnitsInRectOfPlayer(rct.EntireGameArea, P9)
+        ForGroup(g1, function()
+            IssuePointOrder(GetEnumUnit(), "patrol",
+                GetRectCenterX(rct.EntranceToFortress), GetRectCenterY(rct.EntranceToFortress))
+        end)
+        DestroyGroup(g1)
+        local g2 = GetUnitsInRectOfPlayer(rct.EntireCastleArea, P9)
+        ForGroup(g2, function()
+            IssuePointOrder(GetEnumUnit(), "patrol",
+                GetRectCenterX(rct.PrinceArea), GetRectCenterY(rct.PrinceArea))
+        end)
+        DestroyGroup(g2)
+    end)
+
+    -- Intimidating Shout (A035): panic nearby enemies, scatter them 4×, then send them (and every
+    -- other non-caravan enemy) marching back at the base. IntimShoutGroup is persistent (the
+    -- original never clears it — faithful).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A035')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local radius = 55.0 * GetHeroLevel(caster)
+        ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), radius, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            GroupAddUnit(IntimShoutGroup, GetEnumUnit())
+        end)
+        scatterGroup(IntimShoutGroup)
+        FloatText(caster, "|cffff00ffIntimidate!|r", 100, 0, 100, 3.0)
+        for _ = 1, 3 do
+            TriggerSleepAction(2.0)
+            scatterGroup(IntimShoutGroup)
+        end
+        TriggerSleepAction(2.0)
+        ForGroup(IntimShoutGroup, function()
+            local loc = GetRandomLocInRect(rct.CastleEntranceDest)
+            IssuePointOrder(GetEnumUnit(), "patrol", GetLocationX(loc), GetLocationY(loc))
+            RemoveLocation(loc)
+        end)
+        local g = GetUnitsOfPlayerMatching(P9, Condition(function()
+            return GetUnitTypeId(GetFilterUnit()) ~= FourCC('h01A')
+        end))
+        ForGroup(g, function()
+            IssuePointOrder(GetEnumUnit(), "patrol",
+                GetRectCenterX(rct.StartingPlayerArea), GetRectCenterY(rct.StartingPlayerArea))
+        end)
+        DestroyGroup(g)
+        EnableTrigger(nudgeT)
+    end)
+
+    -- Cave In (A0I1, channel): a cavern-dust plume at the caster for 5s. (The original captured a
+    -- stale effect handle and leaked the dust; the port shows + cleans up the dust as intended.)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CHANNEL, function()
+        return GetSpellAbilityId() == FourCC('A0I1')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local dust = AddSpecialEffect("Doodads\\Cinematic\\CavernDust\\CavernDust.mdl",
+            GetUnitX(caster), GetUnitY(caster))
+        TriggerSleepAction(5.0)
+        DestroyEffect(dust)
+    end)
+
+    -- Crushing Slam (A0I2): a ground-pound — terrain ripple + violently shove every enemy within
+    -- 350 outward. (The JASS ripple uses a stale GetAttackedUnitBJ loc; the port ripples at the
+    -- caster, the slam's actual centre.)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0I2')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local cx, cy = GetUnitX(caster), GetUnitY(caster)
+        local loc = Location(cx, cy)
+        TerrainDeformationRippleBJ(2.4, false, loc, 196.0, 300.0, 96.0, 0.4, 49.0)
+        RemoveLocation(loc)
+        TriggerSleepAction(0.5)
+        ForUnitsInRange(cx, cy, 350.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            crushKnockback(caster, GetEnumUnit())
+        end)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1021,4 +1140,5 @@ function RegisterAbilityTriggers()
     setupHorizonWanderer()
     setupCryptguard()
     setupPaladin()
+    setupRockfighter()
 end
