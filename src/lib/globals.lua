@@ -392,6 +392,9 @@ FlameWreathCount               = 0   -- times Crested Drake used Flame Wreath (A
 DrakeFangCount                 = 0   -- ranks of Drakefang (A05H) learned
 SniperMarkTarget               = nil -- unit marked by Sniper's Mark; set by that ability trigger
 SniperMarkKills                = 0   -- times Sharpshooter killed a Sniper's Mark target
+SnipersMark                    = 0   -- gold bounty paid when a marked target dies (+20/rank)
+ElvenSniper                    = nil -- the Elven Sharpshooter (H02N) hero unit
+ElvenSniperPlayer              = nil -- owner of the Elven Sharpshooter
 Lv5SpellBonus                  = 0   -- spells cast at P9 Knights in level 5
 
 -- ── Exposed trigger handles (set by RegisterAchievementTriggers) ─────────────

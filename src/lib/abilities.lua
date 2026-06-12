@@ -552,6 +552,73 @@ local function setupAxeBrother()
     end)
 end
 
+-- ══ Elven Sharpshooter (H02N) — war3map.j 42590-42719 ══════════════════════════
+-- Sniper's Mark (learn/cast A07O): marks a target for 30s; if the sniper's team kills it while
+-- marked, they collect a gold bounty (+20/rank). Shock Arrows (learn A07R): every attack lands a
+-- small terrain-rippling AoE burst (60+40+20 = 120 split over two radii) — armed once learned.
+
+local SHARPSHOOTER = FourCC('H02N')
+
+local function setupSharpshooter()
+    -- Sniper's Mark Learn (A07O, real unit only): +20 gold bounty per rank; remember the sniper.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return not IsUnitIllusion(GetLearningUnit()) and GetLearnedSkillBJ() == FourCC('A07O')
+    end, function()
+        SnipersMark = SnipersMark + 20
+        ElvenSniper = GetLearningUnit()
+        ElvenSniperPlayer = GetOwningPlayer(ElvenSniper)
+    end)
+
+    -- Sniper's Mark Cast (A07O): tag the target as marked for 30s.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A07O')
+    end, function()
+        local target = GetSpellTargetUnit()
+        FloatText(target, "Marked!", 100, 0, 0, 3.0)
+        SniperMarkTarget = target
+        TriggerSleepAction(30.0)
+        if SniperMarkTarget == target then SniperMarkTarget = nil end
+    end)
+
+    -- Sniper Mark Kill: the sniper's team kills the marked target → gold bounty.
+    -- (The "Kill Shots" achievement counts the same kill independently in achievements.lua.)
+    OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return SniperMarkTarget ~= nil and GetDyingUnit() == SniperMarkTarget
+            and GetOwningPlayer(GetKillingUnit()) == ElvenSniperPlayer
+    end, function()
+        local killer = GetOwningPlayer(GetKillingUnit())
+        FloatText(GetDyingUnit(), "+" .. tostring(SnipersMark), 100, 100, 0, 3.0)
+        AdjustPlayerStateBJ(SnipersMark, killer, PLAYER_STATE_RESOURCE_GOLD)
+    end)
+
+    -- Shock Arrows (attack by H02N): a small AoE burst at the struck unit, armed once learned.
+    local shockT
+    shockT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetUnitTypeId(GetAttacker()) == SHARPSHOOTER
+    end, function()
+        local attacker, victim = GetAttacker(), GetAttackedUnitBJ()
+        TriggerSleepAction(0.5)
+        if GetUnitTypeId(victim) == 0 then return end
+        local x, y = GetUnitX(victim), GetUnitY(victim)
+        local loc = Location(x, y)
+        TerrainDeformationRippleBJ(2.4, false, loc, 196.0, 196.0, 96.0, 0.4, 49.0)
+        RemoveLocation(loc)
+        UnitDamagePoint(attacker, 0, 60.0, x, y, 25.0, false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        UnitDamagePoint(attacker, 0, 40.0, x, y, 25.0, false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        UnitDamagePoint(attacker, 0, 20.0, x, y, 50.0, false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+    end)
+    DisableTrigger(shockT)
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A07R')
+    end, function()
+        ElvenSniper = GetLearningUnit()
+        EnableTrigger(shockT)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -559,4 +626,5 @@ function RegisterAbilityTriggers()
     setupRogue()
     setupWildbond()
     setupAxeBrother()
+    setupSharpshooter()
 end
