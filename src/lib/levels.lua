@@ -138,6 +138,11 @@ local CLASS_PAYOUTS = {
 }
 
 function BonusesAndUpkeep(levelIndex)
+    -- Swashbuckler Opportunist: skim bonus gold after every award (war3map.j 6888-6955, 9114-9151).
+    local function opportunist()
+        if trg_Opportunist_Gain then ConditionalTriggerExecute(trg_Opportunist_Gain) end
+    end
+
     -- Helper: award gold + message to ALL human players.
     local function awardAll(gold, msg)
         DisplayTimedTextToForce(GetPlayersAll(), 10.0, msg)
@@ -147,6 +152,7 @@ function BonusesAndUpkeep(levelIndex)
             end
         end
         TotalBonusGold = TotalBonusGold + gold
+        opportunist()
     end
 
     -- Helper: award gold + message to ONE specific player.
@@ -155,6 +161,7 @@ function BonusesAndUpkeep(levelIndex)
         DisplayTimedTextToForce(GetPlayersAll(), 10.0, msg)
         AdjustPlayerStateBJ(gold, player, PLAYER_STATE_RESOURCE_GOLD)
         TotalBonusGold = TotalBonusGold + gold
+        opportunist()
     end
 
     -- ── Universal bonuses (war3map.j 6886-6960) ───────────────────────────────

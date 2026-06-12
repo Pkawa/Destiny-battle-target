@@ -1566,6 +1566,100 @@ local function setupIllusionist()
     end)
 end
 
+-- ══ Swashbuckler / Dramlor (E015) — war3map.j 42721-43005 ══════════════════════
+-- A daring rogue. Dagger Toss (A0C7): a rank-scaling AoE nuke around her. Derring-Do (A0C9): each
+-- kill has a chance to Unholy-Frenzy a random ally (via the e00R dummy). Opportunist (A0CB): she
+-- skims bonus gold whenever the team is awarded any. Dramlor's Guarantee (ult A0C8): learning it
+-- drops guaranteed artifacts at her feet.
+
+local SWASHBUCKLER = FourCC('E015')
+-- Dagger Toss damage by rank (JASS DaggerTossTotalDmg[1..5]).
+local DAGGER_TOSS_DMG = { 25.0, 50.0, 100.0, 150.0, 200.0 }
+
+local function setupSwashbuckler()
+    -- Dagger Toss Learn (A0C7): +1 rank (damage tier).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0C7')
+    end, function()
+        DaggerTossDamage = DaggerTossDamage + 1
+    end)
+
+    -- Dagger Toss Use (cast A0C7): damage every enemy within 180 for the rank's amount.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0C7')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local dmg = DAGGER_TOSS_DMG[DaggerTossDamage]
+        if not dmg then return end
+        ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), 180.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            UnitDamageTarget(caster, GetEnumUnit(), dmg, false, false,
+                ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        end)
+    end)
+
+    -- Derring-Do Kill (an E015 kills something): a DerringDoChance% chance to Unholy-Frenzy a
+    -- random allied (Player(10)) non-structure unit via the e00R dummy.
+    local derringKillT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetKillingUnit()) == SWASHBUCKLER
+    end, function()
+        DerringDoProc = GetRandomInt(1, 100)
+        if DerringDoProc > DerringDoChance then return end
+        local g = GetUnitsOfPlayerMatching(Player(10), Condition(function()
+            return not IsUnitType(GetFilterUnit(), UNIT_TYPE_STRUCTURE)
+        end))
+        local ally = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        if unit_e00R and ally then IssueTargetOrder(unit_e00R, "unholyfrenzy", ally) end
+    end)
+    DisableTrigger(derringKillT)
+
+    -- Derring-Do Learn (A0C9): +10% proc, arm the kill trigger, spawn the h03X flair unit.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0C9')
+    end, function()
+        local hero = GetLearningUnit()
+        DerringDoChance = DerringDoChance + 10
+        EnableTrigger(derringKillT)
+        CreateUnit(GetOwningPlayer(hero), FourCC('h03X'), GetUnitX(hero), GetUnitY(hero), bj_UNIT_FACING)
+    end)
+
+    -- Opportunist Gain (no event — fired from BonusesAndUpkeep's award helpers via trg_Opportunist_Gain):
+    -- skim OpportunistTotalGold to the Swashbuckler with a gold-pile flourish.
+    local oppT = CreateTrigger()
+    TriggerAddAction(oppT, function()
+        if OpportunistTotalGold <= 0 or not SwashbucklerPlayer then return end
+        local g = GetUnitsOfTypeIdAll(SWASHBUCKLER)
+        local sb = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        if sb then
+            local fx = AddSpecialEffect("Abilities\\Spells\\Other\\Transmute\\PileofGold.mdl",
+                GetUnitX(sb), GetUnitY(sb))
+            After(2.0, function() DestroyEffect(fx) end)
+            FloatText(sb, "+" .. tostring(OpportunistTotalGold), 100, 100, 0, 2.0)
+        end
+        AdjustPlayerStateBJ(OpportunistTotalGold, SwashbucklerPlayer, PLAYER_STATE_RESOURCE_GOLD)
+    end)
+    trg_Opportunist_Gain = oppT
+
+    -- Opportunist Learn (A0CB): record the Swashbuckler + +10 skim per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0CB')
+    end, function()
+        SwashbucklerPlayer = GetOwningPlayer(GetLearningUnit())
+        OpportunistTotalGold = OpportunistTotalGold + 10
+    end)
+
+    -- Dramlor's Guarantee (ult A0C8): learning it drops 1 Lv2 + 2 Lv1 artifacts at her feet.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0C8')
+    end, function()
+        local hero = GetLearningUnit()
+        DropDramlorGuarantee(GetUnitX(hero), GetUnitY(hero))
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1583,4 +1677,5 @@ function RegisterAbilityTriggers()
     setupWarGuard()
     setupSunSoul()
     setupIllusionist()
+    setupSwashbuckler()
 end

@@ -61,6 +61,14 @@ local function drawFrom(p)
     return p[GetRandomInt(0, p.max)]
 end
 
+-- Dramlor's Guarantee (Swashbuckler ult, war3map.j 42991): drop 1 Lv2 + 2 Lv1 artifacts at (x,y).
+-- Exposed so abilities.lua can reuse the encapsulated artifact pools.
+function DropDramlorGuarantee(x, y)
+    CreateItem(drawFrom(Lv2Artifact), x, y)
+    CreateItem(drawFrom(Lv1Artifact), x, y)
+    CreateItem(drawFrom(Lv1Artifact), x, y)
+end
+
 -- Lv_1_Item (war3map.j 34107) — enabled from the start (Lv_2_Item is for later levels).
 function RegisterItemDropTriggers()
     local t = CreateTrigger()
