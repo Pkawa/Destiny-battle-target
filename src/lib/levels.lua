@@ -1413,8 +1413,15 @@ local function setupLevel28AI()
         if roll <= 2 then
             CreateNUnitsAtLoc(1, WEBBED_VICTIM[roll], P9, spawnLoc, bj_UNIT_FACING)
         else
-            CreateNUnitsAtLoc(1, WEBBED_VICTIM[roll], Player(8), spawnLoc, bj_UNIT_FACING)
+            local rescued = CreateUnitAtLoc(Player(8), WEBBED_VICTIM[roll], spawnLoc, bj_UNIT_FACING)
             TriggerSleepAction(2.0)
+            -- The JASS only sweeps victim types 4-6 toward Vern (war3map.j 23875-23877), so a
+            -- freed type-3 Squire Captain (h005) is never ordered and relied on the Player-8
+            -- ally AI to walk it home. We don't run that AI, so order the just-freed unit
+            -- directly toward the base too (triage-3 #7).
+            if rescued and GetUnitTypeId(rescued) ~= 0 then
+                IssuePointOrderLoc(rescued, "patrol", GetRectCenter(rct.VernPatrolB))
+            end
             for i = 4, 6 do
                 local g = GetUnitsOfTypeIdAll(WEBBED_VICTIM[i])
                 ForGroup(g, function()
