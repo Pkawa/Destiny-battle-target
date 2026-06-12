@@ -1409,6 +1409,75 @@ local function setupWarGuard()
     end)
 end
 
+-- ══ Sun Soul Initiate (E004) — war3map.j 45762-45901 ═══════════════════════════
+-- A radiant monk. Sol Strike (A02H): once cast, the next attack after a rank-scaling number of
+-- swings discharges (strips the target's buffs — the spell's proc fires via object data). Aurora
+-- Rays (A02I): a 120s aurora that pulses +30 HP to every non-structure, non-neutral unit every 5s.
+
+local function setupSunSoul()
+    -- Sol Strike Learn (A02H): +1 to the swings needed before a discharge.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A02H')
+    end, function()
+        SolStrikeTotalAttacks = SolStrikeTotalAttacks + 1
+    end)
+
+    -- Sol Strike On (cast A02H): arm the charge on the caster.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A02H')
+    end, function()
+        SolStrike = GetSpellAbilityUnit()
+    end)
+
+    -- Sol Strike Discharge (the charging Initiate attacks): count swings; on the Nth, disarm and
+    -- strip the target's buffs. (Faithful quirk: SolStrikeAttacks is never reset, so after the
+    -- first full charge later casts discharge on the very first swing — war3map.j 45823.)
+    OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetAttacker() == SolStrike
+    end, function()
+        if SolStrikeAttacks >= SolStrikeTotalAttacks then
+            local attacker = GetAttacker()
+            SolStrike = nil
+            TriggerSleepAction(1.0)
+            UnitRemoveBuffs(attacker, true, true)
+        else
+            SolStrikeAttacks = SolStrikeAttacks + 1
+        end
+    end)
+
+    -- Aurora Rays (cast A02I): a 120s healing aurora — weather + a 5s pulse healing everyone.
+    local healT = CreateTrigger()
+    DisableTrigger(healT)
+    TriggerRegisterTimerEventPeriodic(healT, 5.0)
+    TriggerAddAction(healT, function()
+        ForUnitsInRect(GetPlayableMapRect(), function()
+            local f = GetFilterUnit()
+            return not IsUnitType(f, UNIT_TYPE_STRUCTURE) and GetOwningPlayer(f) ~= P8
+        end, function()
+            local u = GetEnumUnit()
+            SetUnitLifeBJ(u, GetUnitState(u, UNIT_STATE_LIFE) + 30.0)
+        end)
+    end)
+
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A02I')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        EnableTrigger(healT)
+        DisplayTextToForce(GetPlayersAll(),
+            GetPlayerName(GetOwningPlayer(caster)) .. " casts |cff995500Aurora Rays|r!")
+        local beacon = CreateUnit(Player(0), FourCC('e005'),
+            GetRectCenterX(rct.ResearchArea), GetRectCenterY(rct.ResearchArea), bj_UNIT_FACING)
+        local auroraEffect = AddWeatherEffect(GetPlayableMapRect(), FourCC('LRaa'))
+        EnableWeatherEffect(auroraEffect, true)
+        TriggerSleepAction(120.0)
+        EnableWeatherEffect(auroraEffect, false)
+        RemoveWeatherEffect(auroraEffect)   -- free the weather handle (original only disabled it)
+        if GetUnitTypeId(beacon) ~= 0 then RemoveUnit(beacon) end
+        DisableTrigger(healT)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1424,4 +1493,5 @@ function RegisterAbilityTriggers()
     setupRockfighter()
     setupTundraBarbarian()
     setupWarGuard()
+    setupSunSoul()
 end
