@@ -1273,6 +1273,130 @@ local function setupTundraBarbarian()
     end)
 end
 
+-- ══ War Guard (H02X) — war3map.j 46318-46599 ═══════════════════════════════════
+-- A protector tank. Aid Another (A0AA): for a while, anyone attacking the chosen ally is taunted
+-- onto the War Guard. Shield Bash (A0AB): single-target taunt. Perfect Defense (A0AC): a tier-up
+-- aura on the e00V dummy that fires Inner Fire on him every 25 hits taken (count resets each 10s).
+-- Rescue (A0AI): when the watched ally drops below 20% HP, he blinks to them and shields them
+-- invulnerable for 5s. Oath (A0B6): a war-cry sound (its buff is object-data).
+
+-- Perfect Defense: rank → the aura ability the e00V dummy carries (JASS PerfectDefenseAbil[1..5]).
+local PERFECT_DEFENSE_ABIL = { FourCC('A0B2'), FourCC('A0B3'), FourCC('A0B4'), FourCC('A0B5'), FourCC('A01V') }
+
+local function setupWarGuard()
+    -- Aid Another Eff (an attacker hits the protected ally): taunt them onto the War Guard.
+    local aidEffT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetAttackedUnitBJ() == AidAnother
+    end, function()
+        local g = GetUnitsOfTypeIdAll(FourCC('H02X'))
+        local wg = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        if wg then IssueTargetOrder(GetAttacker(), "attack", wg) end
+        FloatText(GetAttacker(), "Aid!", 100, 0, 0, 3.0)
+    end)
+    DisableTrigger(aidEffT)
+
+    -- Aid Another Learn (A0AA): +5s protection per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0AA')
+    end, function()
+        AidAnotherTimer = AidAnotherTimer + 5.0
+    end)
+
+    -- Aid Another (cast A0AA): protect the target for 10 + timer seconds.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0AA')
+    end, function()
+        AidAnother = GetSpellTargetUnit()
+        EnableTrigger(aidEffT)
+        TriggerSleepAction(10.0 + AidAnotherTimer)
+        DisableTrigger(aidEffT)
+    end)
+
+    -- Perfect Defense Eff (the War Guard is attacked): every 25 hits, the dummy Inner Fires him.
+    local pdEffT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetAttackedUnitBJ() == WarGuard
+    end, function()
+        PerfectDefenseTotalCount = PerfectDefenseTotalCount + 1
+        if PerfectDefenseTotalCount >= 25 then
+            PerfectDefenseTotalCount = 0
+            FloatText(WarGuard, "|cffffff00Perfect Defense!|r", 100, 100, 0, 2.0)
+            if unit_e00V and WarGuard then IssueTargetOrder(unit_e00V, "innerfire", WarGuard) end
+        end
+    end)
+    DisableTrigger(pdEffT)
+
+    -- Perfect Defense Reset (every 10s): the hit counter decays so the 25 must come in a burst.
+    local pdResetT = CreateTrigger()
+    DisableTrigger(pdResetT)
+    TriggerRegisterTimerEventPeriodic(pdResetT, 10.0)
+    TriggerAddAction(pdResetT, function() PerfectDefenseTotalCount = 0 end)
+
+    -- Perfect Defense Learn (A0AC): swap the dummy's aura up a tier + arm the eff/reset triggers.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0AC')
+    end, function()
+        if unit_e00V and PERFECT_DEFENSE_ABIL[PerfectDefense] then
+            UnitRemoveAbility(unit_e00V, PERFECT_DEFENSE_ABIL[PerfectDefense])
+        end
+        WarGuard = GetLearningUnit()
+        EnableTrigger(pdEffT)
+        EnableTrigger(pdResetT)
+        PerfectDefense = PerfectDefense + 1
+        if unit_e00V and PERFECT_DEFENSE_ABIL[PerfectDefense] then
+            UnitAddAbility(unit_e00V, PERFECT_DEFENSE_ABIL[PerfectDefense])
+        end
+    end)
+
+    -- Shield Bash (cast A0AB): single-target taunt onto the War Guard.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0AB')
+    end, function()
+        if WarGuard then IssueTargetOrder(GetSpellTargetUnit(), "attack", WarGuard) end
+    end)
+
+    -- Rescue Cast (the watched ally is attacked at ≤20% HP): blink in + shield it invuln 5s.
+    local rescueCastT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetAttackedUnitBJ() == RescueTarget and GetUnitLifePercent(GetAttackedUnitBJ()) <= 20.0
+    end, function()
+        local ally = GetAttackedUnitBJ()
+        SetUnitInvulnerable(ally, true)
+        FloatText(RescueTarget, "|cff00ff00Rescued!|r", 100, 100, 0, 5.0)
+        if WarGuard then
+            SetUnitPosition(WarGuard, GetUnitX(ally), GetUnitY(ally))
+            PanCameraToTimedForPlayer(GetOwningPlayer(WarGuard),
+                GetUnitX(WarGuard), GetUnitY(WarGuard), 0)
+        end
+        local sfx = AddSpecialEffectTarget(
+            "Abilities\\Spells\\Orc\\AncestralSpirit\\AncestralSpiritCaster.mdl", ally, "origin")
+        DisableTrigger(GetTriggeringTrigger())
+        TriggerSleepAction(5.0)
+        SetUnitInvulnerable(ally, false)
+        DestroyEffect(sfx)
+    end)
+    DisableTrigger(rescueCastT)
+
+    -- Rescue (cast A0AI): start watching the target ally.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0AI')
+    end, function()
+        RescueTarget = GetSpellTargetUnit()
+        FloatText(RescueTarget, "Rescue!", 100, 100, 0, 2.0)
+        if WarGuard then
+            DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(WarGuard)),
+                "Rescue: " .. GetPlayerName(GetOwningPlayer(RescueTarget)))
+        end
+        EnableTrigger(rescueCastT)
+    end)
+
+    -- Oath of the War Guard (cast A0B6): a war-cry (the actual aura is the ability's object data).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0B6')
+    end, function()
+        if snd.HeartLong then PlaySoundBJ(snd.HeartLong) end
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1287,4 +1411,5 @@ function RegisterAbilityTriggers()
     setupPaladin()
     setupRockfighter()
     setupTundraBarbarian()
+    setupWarGuard()
 end
