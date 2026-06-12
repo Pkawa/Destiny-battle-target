@@ -439,10 +439,124 @@ local function setupWildbond()
     end)
 end
 
+-- ══ Axe Brother (E006) — war3map.j 37529-37865 ═════════════════════════════════
+-- A berserker whose attacks proc. Decimate (learn A03O): each rank +5% chance that an attack
+-- erupts into a 5-hit ×40 flurry. Fang Strike (learn/cast A03P): a 15s window that adds a big
+-- Decimate-chance burst (+20/40/60/100 by rank) and makes the flurry deal real CHAOS damage.
+-- Assault (learn A03Q): the brother banks every kill (KillsForAxeBrother); a small chance per
+-- attack discharges them all as KillsForAxeBrother × 15/rank bonus damage.
+
+local AXE_BROTHER = FourCC('E006')
+local DECIMATE_BLOOD = "Objects\\Spawnmodels\\NightElf\\NightElfBlood\\NightElfBloodHippogryph.mdl"
+local FANG_BURST = { 20, 40, 60, 100 }   -- [rank] = Decimate chance added during the window
+
+local function decimateFlurry(attacker, victim, chaos)
+    -- 5 hits of 40 over ~2s gaps. CHAOS (real, mitigable) during a Fang Strike window; otherwise
+    -- a flat life subtraction (armour-ignoring) — matches the two JASS branches.
+    if snd.ArtilleryCorpseExplodeDeath1 then PlaySoundOnUnitBJ(snd.ArtilleryCorpseExplodeDeath1, 100, victim) end
+    DestroyEffect(AddSpecialEffectTarget(DECIMATE_BLOOD, victim, "origin"))
+    FloatText(victim, "Decimate!", 100, 0, 0, 2.0)
+    TriggerSleepAction(2.0)
+    if trg_AxeBrotherSavageFighter then ConditionalTriggerExecute(trg_AxeBrotherSavageFighter) end
+    for _ = 1, 5 do
+        if GetUnitTypeId(victim) == 0 then return end
+        FloatText(victim, "40", 100, 100, 100, 1.0)
+        if chaos then
+            UnitDamageTarget(attacker, victim, 40.0, false, false,
+                ATTACK_TYPE_CHAOS, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        else
+            SetUnitLifeBJ(victim, GetUnitState(victim, UNIT_STATE_LIFE) - 40.0)
+        end
+        TriggerSleepAction(2.0)
+    end
+end
+
+local function setupAxeBrother()
+    -- Decimate Learn (A03O): +5% proc chance per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A03O')
+    end, function()
+        DecimateChance = DecimateChance + 5
+    end)
+
+    -- Fang Strike Learn (A03P): bump the rank (drives the burst size).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A03P')
+    end, function()
+        FangStrikeRank = FangStrikeRank + 1
+    end)
+
+    -- Fang Strike (cast A03P): open a 15s window — big Decimate-chance burst + CHAOS flurries.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A03P')
+    end, function()
+        local burst = FANG_BURST[FangStrikeRank]
+        if not burst then return end
+        FangStrikeActive = true
+        DecimateChance = DecimateChance + burst
+        TriggerSleepAction(15.0)
+        DecimateChance = DecimateChance - burst
+        FangStrikeActive = false
+    end)
+
+    -- Decimate Chance: on the brother attacking, roll the proc. Inside a Fang Strike window the
+    -- flurry is CHAOS damage and the trigger stays hot; otherwise it's flat and the trigger is
+    -- gated off during the ~10s flurry so it can't re-proc on itself (war3map.j 37582-37665).
+    local decimateT
+    decimateT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetUnitTypeId(GetAttacker()) == AXE_BROTHER
+    end, function()
+        if GetRandomInt(1, 100) > DecimateChance then return end
+        local attacker, victim = GetAttacker(), GetAttackedUnitBJ()
+        if FangStrikeActive then
+            decimateFlurry(attacker, victim, true)
+        else
+            DisableTrigger(decimateT)
+            decimateFlurry(attacker, victim, false)
+            EnableTrigger(decimateT)
+        end
+    end)
+
+    -- Assault: a kill-banking proc, armed once Assault (A03Q) is learned.
+    local assaultT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetOwningPlayer(GetDyingUnit()) == P9
+            and GetUnitTypeId(GetKillingUnit()) == AXE_BROTHER
+    end, function()
+        KillsForAxeBrother = KillsForAxeBrother + 1
+    end)
+    DisableTrigger(assaultT)
+
+    local assaultChanceT
+    assaultChanceT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetUnitTypeId(GetAttacker()) == AXE_BROTHER
+    end, function()
+        DisableTrigger(assaultChanceT)
+        if GetRandomInt(1, 100) <= AssaultChance then
+            local attacker, victim = GetAttacker(), GetAttackedUnitBJ()
+            TotalAssaultDamage = KillsForAxeBrother * AssaultMultiplier
+            if snd.ArtilleryCorpseExplodeDeath1 then PlaySoundOnUnitBJ(snd.ArtilleryCorpseExplodeDeath1, 100, victim) end
+            FloatText(victim, tostring(TotalAssaultDamage), 100, 100, 100, 3.0)
+            UnitDamageTarget(attacker, victim, TotalAssaultDamage * 1.0, false, false,
+                ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        end
+        EnableTrigger(assaultChanceT)
+    end)
+    DisableTrigger(assaultChanceT)
+
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A03Q')
+    end, function()
+        EnableTrigger(assaultT)
+        EnableTrigger(assaultChanceT)
+        AssaultMultiplier = AssaultMultiplier + 15
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
     setupArcaneArcher()
     setupRogue()
     setupWildbond()
+    setupAxeBrother()
 end
