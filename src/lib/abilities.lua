@@ -741,6 +741,60 @@ local function setupFireMagus()
     end)
 end
 
+-- ══ Horizon Wanderer (E011) — war3map.j 41740-41836 ════════════════════════════
+-- A roaming bruiser. Dimension Door (A00U): casting the outward blink instantly refreshes the
+-- return blink (A00V) so the pair chains freely. Trample (learn A0JJ / cast A0JJ): for
+-- TrampleDuration (+2s/rank) the Wanderer grows, ignores pathing, and each second stomps every
+-- non-hero enemy within 175 — STR damage + a 100-unit knockback away from her.
+
+local STAMPEDE_SFX = "Abilities\\Spells\\Other\\Stampede\\StampedeMissileDeath.mdl"
+
+local function setupHorizonWanderer()
+    -- Dimension Door Reset CD (A00U): refresh the paired return-blink (A00V).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A00U')
+    end, function()
+        BlzEndUnitAbilityCooldown(GetSpellAbilityUnit(), FourCC('A00V'))
+    end)
+
+    -- Learn Trample (A0JJ): +2s of stomping per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0JJ')
+    end, function()
+        TrampleDuration = TrampleDuration + 2
+    end)
+
+    -- Trample cast (A0JJ): a TrampleDuration-second stomp that follows the moving Wanderer.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0JJ')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        SetUnitPathing(caster, false)
+        SetUnitScalePercent(caster, 125.0, 125.0, 125.0)
+        local sfx = AddSpecialEffectTarget(STAMPEDE_SFX, caster, "origin")
+        for _ = 1, TrampleDuration do
+            local cx, cy = GetUnitX(caster), GetUnitY(caster)
+            ForUnitsInRange(cx, cy, 175.0, function()
+                local f = GetFilterUnit()
+                return GetOwningPlayer(f) == P9 and not IsUnitType(f, UNIT_TYPE_HERO)
+            end, function()
+                local e = GetEnumUnit()
+                BlzPlaySpecialEffect(sfx, ANIM_TYPE_BIRTH)
+                UnitDamageTarget(caster, e, GetHeroStr(caster, true) * 1.0, false, false,
+                    ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+                -- shove the victim 100 outward (away from the Wanderer), then face her.
+                local ang = Atan2(GetUnitY(e) - cy, GetUnitX(e) - cx)
+                SetUnitPosition(e, GetUnitX(e) + 100.0 * math.cos(ang), GetUnitY(e) + 100.0 * math.sin(ang))
+                SetUnitFacing(e, (ang + bj_PI) * bj_RADTODEG)
+            end)
+            TriggerSleepAction(1.0)
+        end
+        DestroyEffect(sfx)
+        SetUnitScalePercent(caster, 100.0, 100.0, 100.0)
+        SetUnitPathing(caster, true)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -750,4 +804,5 @@ function RegisterAbilityTriggers()
     setupAxeBrother()
     setupSharpshooter()
     setupFireMagus()
+    setupHorizonWanderer()
 end
