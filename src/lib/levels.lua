@@ -506,7 +506,8 @@ local LevelData = {
     },
     -- ── Levels 13–29 ──────────────────────────────────────────────────────────
     [13] = {
-        intro = "|cff66cc66Level 13|r — The ancient forest erupts! Find and slay the Ancient Treant.",
+        intro = "Level 13 - Dark Forest\nEnemies: ???\n|cff32cd32Victory|r - Figure out the cause "
+            .. "of the forest's turn to evil and return home.\n|cffff0000Defeat|r - Death of Princess Silmeria",
         track = 3, next = 14,
         spawns = {},         -- all initial spawns in setup hook
         victory = { type='itemPickup', item=FourCC('I00U') },
@@ -685,7 +686,7 @@ local LevelData = {
     -- No Level 25 in original (numbering skips 24→Megaboss1→26)
     [26] = {
         intro = "|cffff4400Level 26|r — Boosted HP and damage! Dark Warlocks lead the charge.",
-        track = 3, next = 27,
+        track = 3, next = 27, patrolTo = 'EntranceToFortress',
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h04M'), n=3, dm=1, at=ABC },
@@ -696,7 +697,7 @@ local LevelData = {
     },
     [27] = {
         intro = "|cffff8800Level 27|r — Summoners reinforce the dark warlocks.",
-        track = 3, next = 28,
+        track = 3, next = 28, patrolTo = 'EntranceToFortress',
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h04M'), n=3, dm=1,  at=ABC },
@@ -707,7 +708,7 @@ local LevelData = {
     },
     [28] = {
         intro = "|cffff8800Level 28|r — Spider webs across the land! Guardians defend key zones.",
-        track = 3, next = 29,
+        track = 3, next = 29, patrolTo = 'EntranceToFortress',
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h04M'), n=3, dm=1, at=ABC },
@@ -718,18 +719,13 @@ local LevelData = {
         },
         victory = { type='clearAll', units={
             FourCC('h04M'), FourCC('h04N'), FourCC('h04O'), FourCC('h04V') } },
-        setup = function()
-            -- spawn h04U × 2 per web zone then call AI setup
-            for _, z in ipairs({'SpiderWebsA','SpiderWebsB','SpiderWebsC','SpiderWebsD'}) do
-                CreateNUnitsAtLoc(1, FourCC('h04U'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
-                CreateNUnitsAtLoc(1, FourCC('h04U'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
-            end
-            setupLevel28AI()
-        end,
+        -- setup wired post-table: it calls setupLevel28AI(), which is a local defined AFTER
+        -- this table — an inline closure here captured it as a nil global and errored at run
+        -- time, which halted StartLevel before the victory trigger was armed (L28 unbeatable).
     },
     [29] = {
         intro = "|cffff8800Level 29|r — Shamans summon spirits and a caravan raider strikes.",
-        track = 3, next = 30,  -- L30 is a boss, not yet ported
+        track = 3, next = 30, patrolTo = 'EntranceToFortress',
         spawns = {
             { u=UID.SpeedWisp, n=1,       at=ABC },
             { u=FourCC('h06O'), n=1,       at='CaravanPathA' },
@@ -749,6 +745,7 @@ local LevelData = {
 
 local activeVictoryTrigger = nil
 local levelGen = 0   -- bumped each StartLevel; lets an in-flight victory abort if the level changed
+local level13FailDialog = nil   -- L13 "Time until Disaster" countdown; cleared on victory (onCleared)
 
 -- ── Per-level setup hooks (levels 13-29) ──────────────────────────────────────
 
@@ -758,6 +755,7 @@ local levelGen = 0   -- bumped each StartLevel; lets an in-flight victory abort 
 -- Hurry-up: warning at T+180s/240s, punishment wave at T+300s.
 local function setupLevel13()
     local gen = levelGen
+    Level13Beaten = false   -- reset for replays (-goto); set true again on victory (onCleared wiring)
     local TREANT = FourCC('h018')
     local BOSS   = FourCC('h019')
     local FOREST_ZONES = {
@@ -766,12 +764,12 @@ local function setupLevel13()
         'ForestOverrunI','ForestOverrunJ','ForestOverrunK','ForestOverrunL',
         'ForestOverrunM',
     }
-    -- initial spawn
+    -- initial spawn: DifficultyModifier treants per zone (war3map.j 20762-20774). Floored at 1
+    -- so the "forest overrun" is never empty even when DM is 0 (e.g. a -goto test that skipped
+    -- the difficulty pick) — otherwise only the ungated Angry Ent appears (KNOWN_BUGS T2 #4).
+    local n = math.max(1, DifficultyModifier)
     for _, zone in ipairs(FOREST_ZONES) do
-        local n = DifficultyModifier
-        if n > 0 then
-            CreateNUnitsAtLoc(n, TREANT, P9, GetRectCenter(rct[zone]), bj_UNIT_FACING)
-        end
+        CreateNUnitsAtLoc(n, TREANT, P9, GetRectCenter(rct[zone]), bj_UNIT_FACING)
     end
     CreateNUnitsAtLoc(1, BOSS, P9, GetRectCenter(rct.AngryEnt), bj_UNIT_FACING)
 
@@ -826,11 +824,19 @@ local function setupLevel13()
         end)
     end
 
-    -- hurry-up (war3map.j 20870-20896): warns at T+180s, T+240s, spawns h039 at T+300s
+    -- Visible fail timer + warnings (war3map.j 20870-20896). A 300s "Time until Disaster"
+    -- countdown is shown; warnings at T+180s and T+240s; at T+300s the forest strikes back
+    -- (4 h039 per lane). All gated on Level13Beaten so nothing fires once the level is won.
+    local failT = CreateTimer()
+    local failDlg = CreateTimerDialog(failT)
+    TimerDialogSetTitle(failDlg, "Time until Disaster")
+    TimerDialogDisplay(failDlg, true)
+    level13FailDialog = failDlg
+
     local t180 = CreateTimer()
     TimerStart(t180, 180.0, false, function()
         if not Level13Beaten and levelGen == gen then
-            DisplayTextToForce(GetPlayersAll(), "|cffff8800The forest stirs — hurry up!|r")
+            DisplayTextToForce(GetPlayersAll(), "|cffff0000You feel a terrible unease.. as though a great calamity is coming.  You must hurry and calm the forest!|r")
             PlaySoundBJ(snd.CreepAggroWhat1)
         end
         DestroyTimer(t180)
@@ -838,22 +844,23 @@ local function setupLevel13()
     local t240 = CreateTimer()
     TimerStart(t240, 240.0, false, function()
         if not Level13Beaten and levelGen == gen then
-            DisplayTextToForce(GetPlayersAll(), "|cffff4400The forest is erupting — kill the Ancient Treant!|r")
+            DisplayTextToForce(GetPlayersAll(), "|cffff0000You cannot shake a feeling of imminent disaster, if the forest cannot be calmed shortly!|r")
             PlaySoundBJ(snd.CreepAggroWhat1)
         end
         DestroyTimer(t240)
     end)
-    local t300 = CreateTimer()
-    TimerStart(t300, 300.0, false, function()
+    TimerStart(failT, 300.0, false, function()
         if not Level13Beaten and levelGen == gen then
-            DisplayTextToForce(GetPlayersAll(), "|cffff0000TOO SLOW! The forest strikes back!|r")
+            DisplayTextToForce(GetPlayersAll(), "|cffff0000A horrible cry rends the air, and the ground shakes with uncontained rage.|r")
             PlaySoundBJ(snd.CreepAggroWhat1)
             for _, lane in ipairs({'SpawnA','SpawnB','SpawnC'}) do
                 CreateNUnitsAtLoc(4, FourCC('h039'), P9, GetRectCenter(rct[lane]), bj_UNIT_FACING)
             end
             patrolAll()
         end
-        DestroyTimer(t300)
+        if level13FailDialog == failDlg then level13FailDialog = nil end
+        DestroyTimerDialog(failDlg)
+        DestroyTimer(failT)
     end)
 end
 
@@ -1373,6 +1380,40 @@ local function setupLevel28AI()
         IssuePointOrderLoc(u, "move", GetRectCenter(rct.EntranceToFortress))
     end)
     EnableTrigger(aiTrg)
+
+    -- Web Kill (war3map.j 23840-23887): destroying a spider web (h04U) springs a webbed
+    -- victim near the killer — a roll of 1-2 frees a hostile monster (Player 9), 3-6 rescues
+    -- a friendly captive (Player 8) and rallies the rescued (h045/h04J/h04I) toward safety.
+    local WEBBED_VICTIM = {
+        FourCC('h014'), FourCC('h015'), FourCC('h005'),  -- 1-2 hostile, 3 friendly
+        FourCC('h045'), FourCC('h04J'), FourCC('h04I'),  -- 4-6 friendly (rallied on rescue)
+    }
+    local webTrg = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(webTrg, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(webTrg, Condition(function()
+        return GetUnitTypeId(GetDyingUnit()) == FourCC('h04U') and levelGen == gen
+    end))
+    TriggerAddAction(webTrg, function()
+        local roll = GetRandomInt(1, 6)
+        local killer = GetKillingUnitBJ()
+        local from = (killer and GetUnitTypeId(killer) ~= 0) and GetUnitLoc(killer) or GetUnitLoc(GetDyingUnit())
+        local spawnLoc = PolarProjectionBJ(from, 170.0, GetRandomDirectionDeg())
+        if roll <= 2 then
+            CreateNUnitsAtLoc(1, WEBBED_VICTIM[roll], P9, spawnLoc, bj_UNIT_FACING)
+        else
+            CreateNUnitsAtLoc(1, WEBBED_VICTIM[roll], Player(8), spawnLoc, bj_UNIT_FACING)
+            TriggerSleepAction(2.0)
+            for i = 4, 6 do
+                local g = GetUnitsOfTypeIdAll(WEBBED_VICTIM[i])
+                ForGroup(g, function()
+                    IssuePointOrderLoc(GetEnumUnit(), "patrol", GetRectCenter(rct.VernPatrolB))
+                end)
+                DestroyGroup(g)
+            end
+        end
+        RemoveLocation(from)
+        RemoveLocation(spawnLoc)
+    end)
 end
 
 -- Level 29: h04W (Shaman) casts spiritwolf when attacked at ≤80% HP and full mana
@@ -1520,7 +1561,13 @@ local function setupLevel30()
         After(12.0, function() if levelGen == gen then EnableTrigger(pound) end end)
     end)
 
-    -- Web Spray + Call Hive: war-stomp stun, then summon a hive near the boss after `gap`s.
+    -- Web Spray + Call Hive: war-stomp stun, then raise a hive near the boss after `gap`s.
+    -- The original orders the boss to cast its Carrion-Beetles ability ("summonfactory",
+    -- war3map.j 24249) to spawn the hive (n00V), but Carrion Beetles needs a CORPSE at the
+    -- target point — cast on bare ground it silently does nothing, so the hive never appeared
+    -- (KNOWN_BUGS T2 #28). We create the hive directly and have it birth Spider Swarms (h04O)
+    -- on a timer until it is destroyed or the level ends — the "hive that constantly spawns
+    -- spider swarms" the boss was meant to call (war3map.j 24044).
     local function castHive(b, gap)
         FloatText(b, "Web Spray", 100, 100, 100, 3.0)
         IssueImmediateOrder(b, "stomp")
@@ -1529,9 +1576,19 @@ local function setupLevel30()
             local bb = boss(); if not bb then return end
             local ang = math.rad(GetRandomReal(0.0, 360.0))
             local d   = GetRandomReal(100.0, 300.0)
-            IssuePointOrder(bb, "summonfactory",
-                GetUnitX(bb) + d * math.cos(ang), GetUnitY(bb) + d * math.sin(ang))
+            local hx, hy = GetUnitX(bb) + d * math.cos(ang), GetUnitY(bb) + d * math.sin(ang)
+            local hive = CreateUnit(P9, FourCC('n00V'), hx, hy, bj_UNIT_FACING)
             FloatText(bb, "Call Hive", 100, 100, 100, 3.0)
+            local spawnT = CreateTimer()
+            TimerStart(spawnT, 6.0, true, function()
+                if levelGen ~= gen or GetUnitTypeId(hive) == 0
+                    or GetUnitState(hive, UNIT_STATE_LIFE) <= 0.405 then
+                    DestroyTimer(spawnT); return
+                end
+                local s = CreateUnit(P9, FourCC('h04O'), GetUnitX(hive), GetUnitY(hive), bj_UNIT_FACING)
+                IssuePointOrder(s, "patrol",
+                    GetRectCenterX(rct.EntranceToFortress), GetRectCenterY(rct.EntranceToFortress))
+            end)
             After(1.5, function() if levelGen == gen then repatrol(boss()) end end)
         end)
     end
@@ -1584,6 +1641,16 @@ end
 -- Bind them here, after definition, so they actually fire in StartLevel. (Levels 6/8/10
 -- are unaffected — defined above the table; [28] wraps its call in an inline closure.)
 LevelData[13].setup = setupLevel13
+-- L13 victory sets Level13Beaten = true (war3map.j 20819), which silences the still-pending
+-- hurry-up timers (they all guard on `not Level13Beaten`) and dismisses the fail-timer dialog
+-- so neither warning text nor the "forest strikes back" wave can fire after the level is won.
+LevelData[13].onCleared = function()
+    Level13Beaten = true
+    if level13FailDialog then
+        TimerDialogDisplay(level13FailDialog, false)
+        level13FailDialog = nil
+    end
+end
 LevelData[14].setup = setupLevel14
 LevelData[16].setup = setupLevel16AI
 LevelData[17].setup = setupLevel16AI
@@ -1592,6 +1659,15 @@ LevelData[19].setup = setupLevel19
 LevelData[20].setup = setupLevel20
 LevelData[21].setup = setupLevel21
 LevelData[26].setup = setupLevel26
+-- L28: raise the spider webs (h04U), then arm the flee + web-kill AI (setupLevel28AI is a
+-- local defined above, so this closure — bound after it exists — captures it correctly).
+LevelData[28].setup = function()
+    for _, z in ipairs({'SpiderWebsA','SpiderWebsB','SpiderWebsC','SpiderWebsD'}) do
+        CreateNUnitsAtLoc(1, FourCC('h04U'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
+        CreateNUnitsAtLoc(1, FourCC('h04U'), P9, GetRandomLocInRect(rct[z]), bj_UNIT_FACING)
+    end
+    setupLevel28AI()
+end
 LevelData[29].setup = setupLevel29AI
 
 -- Level 24 is terminal in the table (numbering skips 25); its victory launches the Megaboss 1

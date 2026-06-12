@@ -209,15 +209,26 @@ registerResearch('R00Z', " has researched Strength of Unity! (Lowest Level hero 
         end
     end)
 
--- Reinforcement researches: champion militia + young heroes rise at Vern.
+-- Reinforcement researches: champion militia + young heroes rise at Vern and march to the
+-- front. The original spawns them and leaves them to the Player-8 ally AI (war3map.j 25821);
+-- our port runs no such AI, so without an explicit order they idle at the spawn — we patrol
+-- them toward the fortress entrance so they actually defend (KNOWN_BUGS T2 #9b).
+local function riseAndDefend(id, n, rectKey)
+    for _ = 1, n do
+        local u = CreateUnit(Player(8), FourCC(id),
+            GetRectCenterX(rct[rectKey]), GetRectCenterY(rct[rectKey]), 90.0)
+        IssuePointOrder(u, "patrol",
+            GetRectCenterX(rct.EntranceToFortress), GetRectCenterY(rct.EntranceToFortress))
+    end
+end
 registerResearch('R00P', " has researched Unlikely Heroes! (Four Champion Militia and a Young Hero will rise to Vern's Aid.)",
     function()
-        CreateUnit(Player(8), FourCC('h04B'), GetRectCenterX(rct.YoungHeroSpawn), GetRectCenterY(rct.YoungHeroSpawn), 90.0)
-        CreateNUnitsAtLoc(4, FourCC('h04A'), Player(8), GetRectCenter(rct.YoungHeroMiliSpawn), 90.0)
+        riseAndDefend('h04B', 1, 'YoungHeroSpawn')
+        riseAndDefend('h04A', 4, 'YoungHeroMiliSpawn')
     end)
 registerResearch('R02M', " has researched Crew of Adventurers! (3 Young Heros will rise to Vern's Aid.)",
     function()
-        CreateNUnitsAtLoc(3, FourCC('h04B'), Player(8), GetRectCenter(rct.YoungHeroSpawn), 90.0)
+        riseAndDefend('h04B', 3, 'YoungHeroSpawn')
     end)
 
 -- Botanist Prodigy (R01A): the Flower Seller becomes a Master Botanist; +2500 gold.

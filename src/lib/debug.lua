@@ -55,7 +55,8 @@ local HELP = {
     "-debug help : show this  |  -stop : toggle wave auto-advance",
     "-wave : next waves  |  -goto N : jump to level N  |  -kill : clear wave",
     "-lvl N : set hero level  |  -gold N : give gold  |  -tp : hero to cursor",
-    "-item unc|rare|epic|arti , -mythic : spawn loot at your hero",
+    "-item POOL [name] : spawn loot — unc/rare/epic/arti/scroll/tarot/set/all (name = filter)",
+    "-revealmap : reveal whole map  |  -revive : revive your dead hero(es)",
     "-repick : re-pick hero+feat  |  -defeat : lose  |  -megaboss : launch Megaboss 1",
 }
 
@@ -158,17 +159,45 @@ function RegisterDebugCommands()
     end))
 
     -- ── items ──
-    local function spawnLoot(rarity)
+    -- "-item <pool> [name]" — pool = unc/rare/epic/arti(+2)/scroll/tarot/set/all. With a name
+    -- substring it spawns EVERY matching item (e.g. "-item set phal" → the Phalynx pieces).
+    local function argTwo()
+        local s = GetEventPlayerChatString() or ""
+        local a, b = s:match("%s+(%a%w*)%s+(%S+)")
+        if not a then a = s:match("%s+(%a%w*)") end
+        return (a or ""):lower(), b and b:lower() or nil
+    end
+    local function spawnLoot(pool, sub)
         local h = heroOf(GetTriggerPlayer())
         if not h then return end
-        local name = DebugSpawnItem(rarity, GetUnitX(h), GetUnitY(h))
+        local name = DebugSpawnItem(pool, sub, GetUnitX(h), GetUnitY(h))
         tell(GetTriggerPlayer(), name and ("[debug] spawned " .. name)
-            or "[debug] rarity must be unc/rare/epic/arti")
+            or "[debug] usage: -item unc|rare|epic|arti|scroll|tarot|set|all [name]")
     end
-    cmd("-item", false, gated(function() spawnLoot(argWord()) end))
+    cmd("-item", false, gated(function() spawnLoot(argTwo()) end))
     cmd("-mythic", true, gated(function() spawnLoot("artifact") end))
-    cmd("-set",    true, gated(function() tell(GetTriggerPlayer(), "[debug] set-item pool not ported yet") end))
     cmd("-cursed", true, gated(function() tell(GetTriggerPlayer(), "[debug] cursed-item pool not ported yet") end))
+
+    -- ── reveal + revive ──
+    cmd("-revealmap", true, gated(function()
+        FogEnable(false); FogMaskEnable(false)
+        tell(GetTriggerPlayer(), "[debug] map revealed (fog disabled)")
+    end))
+    cmd("-revive", true, gated(function()
+        local p = GetTriggerPlayer()
+        local loc = GetRectCenter(rct.StartingPlayerArea)
+        local g = GetUnitsOfPlayerMatching(p, Condition(function()
+            return IsUnitType(GetFilterUnit(), UNIT_TYPE_HERO) and IsUnitDeadBJ(GetFilterUnit())
+        end))
+        local n = 0
+        ForGroup(g, function()
+            ReviveHero(GetEnumUnit(), GetLocationX(loc), GetLocationY(loc), true); n = n + 1
+        end)
+        DestroyGroup(g)
+        RemoveLocation(loc)
+        tell(p, n > 0 and ("[debug] revived " .. n .. " hero(es)")
+            or "[debug] no dead hero to revive")
+    end))
 
     -- ── encounters ──
     cmd("-defeat", true, gated(function()

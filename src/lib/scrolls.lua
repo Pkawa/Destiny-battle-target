@@ -77,6 +77,10 @@ scroll('I04J', 'A08C', "Sprint")
 scroll('I03R', 'A08B', "Shield Block")
 scroll('I04K', 'A08D', "Poisoned Weapons")
 
+-- Published for the `-item scroll [name]` debug command (debug.lua → items.DebugSpawnItem).
+DEBUG_SCROLL_CODES = {}
+for id in pairs(SCROLLS) do DEBUG_SCROLL_CODES[#DEBUG_SCROLL_CODES + 1] = id end
+
 -- Remove_Skills (war3map.j 27520-27586): strip every scroll spell from the hero.
 local function removeScrollSkills(hero)
     for _, abil in ipairs(STRIP) do

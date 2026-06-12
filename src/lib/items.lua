@@ -311,6 +311,13 @@ local SETS = {
     { pieces = { 'I05E', 'I05F' },         give = 'I05G', name = "the Phalynx Guard Set" },
     { pieces = { 'I04X', 'I050' },         spawn = 'h04T', name = "the Golem Set" },
     { pieces = { 'I0BB', 'I0BC' },         give = 'I0BD', name = "the Smithyworks Set", once = true },
+    -- Rainbow Orb artifact (war3map.j 33521 — its own standalone trigger in the original,
+    -- folded into the set dispatch here): left + right halves combine into the whole orb.
+    { pieces = { 'I063', 'I06E' },         give = 'I06F', name = "the Rainbow Orb Artifact" },
+    -- Blackweave set (war3map.j 33119) — once-only. Set bonus (a 750 HP skeleton on the
+    -- wearer's death, via HeroWithBlackweave) is a separate mechanic, not yet ported (⬜).
+    { pieces = { 'I04F', 'I04G' },         give = 'I04H', once = true,
+      name = "the blackweave set!  This set may not be completed again" },
 }
 local setByPiece = {}
 for _, s in ipairs(SETS) do
@@ -395,14 +402,66 @@ function RegisterPurchaseTriggers()
 end
 
 -- Debug helper: drop a random Lv1 item of the given rarity at (x,y). Returns its name or nil.
-local DEBUG_POOLS = {
-    unc = Lv1Uncommon, uncommon = Lv1Uncommon, rare = Lv1Rare,
-    epic = Lv1Epic, arti = Lv1Artifact, artifact = Lv1Artifact, mythic = Lv1Artifact,
+-- Flatten a 0-indexed rarity pool to a plain list of FourCC ids.
+local function poolList(p)
+    local t = {}
+    for i = 0, p.max do t[#t + 1] = p[i] end
+    return t
+end
+-- Tarot cards (war3map.j 32203-32360): Hierophant/Wheel/Death/Tower/Star/Judgement + I03P.
+local TAROT_CODES = {
+    FourCC('I089'), FourCC('I08E'), FourCC('I08H'),
+    FourCC('I08M'), FourCC('I08N'), FourCC('I08Q'), FourCC('I03P'),
 }
-function DebugSpawnItem(rarity, x, y)
-    local p = DEBUG_POOLS[rarity]
-    if not p then return nil end
-    return GetItemName(CreateItem(drawFrom(p), x, y))
+local SET_PIECE_CODES = {}
+for _, s in ipairs(SETS) do
+    for _, id in ipairs(s.pieceIds) do SET_PIECE_CODES[#SET_PIECE_CODES + 1] = id end
+    if s.giveId then SET_PIECE_CODES[#SET_PIECE_CODES + 1] = s.giveId end
+end
+local DEBUG_POOLS = {
+    unc = poolList(Lv1Uncommon), uncommon = poolList(Lv1Uncommon), rare = poolList(Lv1Rare),
+    epic = poolList(Lv1Epic), arti = poolList(Lv1Artifact),
+    artifact = poolList(Lv1Artifact), mythic = poolList(Lv1Artifact),
+    unc2 = poolList(Lv2Uncommon), rare2 = poolList(Lv2Rare),
+    epic2 = poolList(Lv2Epic), arti2 = poolList(Lv2Artifact),
+    tarot = TAROT_CODES, set = SET_PIECE_CODES,
+}
+
+local function allDebugCodes()
+    local t = {}
+    for _, list in pairs(DEBUG_POOLS) do for _, id in ipairs(list) do t[#t + 1] = id end end
+    if DEBUG_SCROLL_CODES then  -- list of scroll item ids, published by scrolls.lua
+        for _, id in ipairs(DEBUG_SCROLL_CODES) do t[#t + 1] = id end
+    end
+    return t
+end
+
+-- Debug item spawner. `-item <pool>` drops one random item from that pool; `-item <pool>
+-- <substr>` (or `-item all <substr>`) drops EVERY item whose name contains <substr> — e.g.
+-- "-item set phal" spawns the Phalynx pieces. Pools: unc/rare/epic/arti(+2), scroll, tarot,
+-- set, all. Returns a short description for the chat ack, or nil on an unknown pool.
+function DebugSpawnItem(arg1, arg2, x, y)
+    local function resolve(name)
+        if name == 'scroll' or name == 'scrolls' then return DEBUG_SCROLL_CODES end
+        if name == 'all' or name == nil or name == '' then return allDebugCodes() end
+        return DEBUG_POOLS[name]
+    end
+    if arg2 and arg2 ~= '' then
+        local search = resolve(arg1) or allDebugCodes()
+        local n = 0
+        for _, id in ipairs(search) do
+            local it = CreateItem(id, x, y)
+            if it and (GetItemName(it) or ""):lower():find(arg2, 1, true) then
+                n = n + 1
+            elseif it then
+                RemoveItem(it)
+            end
+        end
+        return n > 0 and (n .. " item(s) matching '" .. arg2 .. "'") or nil
+    end
+    local p = resolve(arg1)
+    if not p or #p == 0 then return nil end
+    return GetItemName(CreateItem(p[GetRandomInt(1, #p)], x, y))
 end
 
 -- ── Bulk sell system (war3map.j 25280-25525) ──────────────────────────────────
