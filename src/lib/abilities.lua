@@ -913,6 +913,102 @@ local function setupCryptguard()
     end)
 end
 
+-- ══ Paladin of Justice (H01J) — war3map.j 45181-45542 ══════════════════════════
+-- A holy knight. Lay on Hands (A02M): sacrifices a fraction of the Paladin's own life as a heal
+-- (bigger fraction per rank). Crusade (A02Q): a passive that, every level the team clears, grants
+-- the Paladin escalating stats — executed from BonusesAndUpkeep, exposed as trg_Crusade. Exorcism
+-- (A02P): smites a fixed roster of unholy enemy types for 300. Angel SFX: gives any spawned angel
+-- guardian (h01K) a translucent holy glow.
+
+local PALADIN = FourCC('H01J')
+local ANGEL_GUARDIAN = FourCC('h01K')
+-- Lay on Hands: heal = caster's current life / divisor[rank] (war3map.j 45248-45298).
+local LOH_DIVISOR = { 5.0, 2.5, 1.67, 1.25, 1.25 }
+-- Crusade: per rank, stats granted to the Paladin each level cleared (war3map.j 45340-45387).
+local CRUSADE_STATS = {
+    { str = 1, agi = 0, int = 0 },
+    { str = 1, agi = 0, int = 2 },
+    { str = 1, agi = 1, int = 1 },
+    { str = 2, agi = 1, int = 1 },
+}
+-- Exorcism only smites these "unholy" target types (war3map.j 45450-45496).
+local EXORCISM_TARGETS = {}
+for _, c in ipairs({ 'h01H', 'h01Q', 'h01G', 'h01E', 'h01F', 'h03S', 'h02Q', 'h01R',
+                     'h04R', 'h06Q', 'h06R', 'h06P', 'h04L', 'O004', 'N015' }) do
+    EXORCISM_TARGETS[FourCC(c)] = true
+end
+
+local function addStat(unit, getter, setter, n)
+    if n > 0 then setter(unit, getter(unit, false) + n, true) end
+end
+
+local function setupPaladin()
+    -- LoH Learn (A02M): +1 rank (raises the heal fraction).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A02M')
+    end, function()
+        LayOnHands = LayOnHands + 1
+    end)
+
+    -- Lay on Hands (cast A02M): heal the target for a fraction of the Paladin's own current life.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A02M')
+    end, function()
+        local div = LOH_DIVISOR[LayOnHands]
+        if not div then return end
+        TriggerSleepAction(0.5)
+        local caster, target = GetSpellAbilityUnit(), GetSpellTargetUnit()
+        local heal = GetUnitState(caster, UNIT_STATE_LIFE) / div
+        SetUnitLifeBJ(target, GetUnitState(target, UNIT_STATE_LIFE) + heal)
+        FloatText(target, "Lay on Hands: +" .. tostring(math.floor(heal)), 100, 100, 0, 3.0)
+    end)
+
+    -- Crusade Learn (A02Q): the original juggles two Learn triggers on this one skill (Crusade +
+    -- Exorcism); ExorcismValue is never read, so only the Crusade rank matters.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A02Q')
+    end, function()
+        CrusadeLevel = CrusadeLevel + 1
+    end)
+
+    -- Crusade (no event — executed once per cleared level from BonusesAndUpkeep via trg_Crusade):
+    -- grant the Paladin escalating stats by rank.
+    local crusadeT = CreateTrigger()
+    TriggerAddAction(crusadeT, function()
+        TriggerSleepAction(2.0)
+        local g = GetUnitsOfTypeIdAll(PALADIN)
+        local pal = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        local bonus = CRUSADE_STATS[CrusadeLevel]
+        if not pal or not bonus then return end
+        TriggerSleepAction(1.0)
+        FloatText(pal, "|cffffff00Crusade!|r", 100, 25, 100, 5.0)
+        addStat(pal, GetHeroStr, SetHeroStr, bonus.str)
+        addStat(pal, GetHeroAgi, SetHeroAgi, bonus.agi)
+        addStat(pal, GetHeroInt, SetHeroInt, bonus.int)
+    end)
+    trg_Crusade = crusadeT
+
+    -- Exorcism (cast A02P): 300 melee damage, but only to the fixed roster of unholy types.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A02P')
+            and EXORCISM_TARGETS[GetUnitTypeId(GetSpellTargetUnit())] == true
+    end, function()
+        UnitDamageTarget(GetSpellAbilityUnit(), GetSpellTargetUnit(), 300.0, false, false,
+            ATTACK_TYPE_MELEE, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+    end)
+
+    -- Angel SFX: any spawned angel guardian (h01K) gets a translucent holy glow.
+    OnEnterRect(GetEntireMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == ANGEL_GUARDIAN
+    end, function()
+        local angel = GetEnteringUnit()
+        AddSpecialEffectTarget("Abilities\\Spells\\NightElf\\Tranquility\\TranquilityTarget.mdl",
+            angel, "origin")
+        SetUnitVertexColorBJ(angel, 100, 100, 100, 40.0)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -924,4 +1020,5 @@ function RegisterAbilityTriggers()
     setupFireMagus()
     setupHorizonWanderer()
     setupCryptguard()
+    setupPaladin()
 end

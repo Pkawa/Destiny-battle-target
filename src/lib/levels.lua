@@ -270,6 +270,10 @@ function BonusesAndUpkeep(levelIndex)
         DisplayTextToForce(GetPlayersAll(),
             "|cff00ccff+" .. tostring(xp) .. " EXP! (Applied Knowledge)|r")
     end
+
+    -- ── Paladin of Justice Crusade (war3map.j 6858) ───────────────────────────
+    -- Grants the Paladin escalating stats each cleared level (combat/Abilities.md).
+    if trg_Crusade then ConditionalTriggerExecute(trg_Crusade) end
 end
 
 -- ─── Per-level setup hooks (boss stats/skills + enemy AI) ──────────────────────
