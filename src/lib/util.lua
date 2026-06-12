@@ -7,36 +7,43 @@
 -- GetEnumUnit() inside an action (same as ForGroup).
 
 -- ── Group enumeration ─────────────────────────────────────────────────────────
--- The group is created and destroyed internally, so callers can never leak one.
+-- The group AND the filter boolexpr are created and destroyed internally, so callers
+-- can never leak one. (A `Condition(luaFn)` is a handle that must be DestroyBoolExpr'd —
+-- skipping it leaks a boolexpr + its pinned closure on every call, and these run in hot
+-- per-attack / per-second loops.)
+
+-- Run a unit enumeration with an optional Lua filter, cleaning up both the group and the
+-- boolexpr. `enumFn(group, boolexpr)` performs the actual GroupEnum* call.
+local function enumClean(filterFn, enumFn, useFn)
+    local g = CreateGroup()
+    local b = filterFn and Condition(filterFn) or nil
+    enumFn(g, b)
+    local result = useFn(g)
+    DestroyGroup(g)
+    if b then DestroyBoolExpr(b) end
+    return result
+end
 
 function CountInRange(x, y, r, filterFn)
-    local g = CreateGroup()
-    GroupEnumUnitsInRange(g, x, y, r, filterFn and Condition(filterFn) or nil)
-    local n = CountUnitsInGroup(g)
-    DestroyGroup(g)
-    return n
+    return enumClean(filterFn,
+        function(g, b) GroupEnumUnitsInRange(g, x, y, r, b) end, CountUnitsInGroup)
 end
 
 function ForUnitsInRange(x, y, r, filterFn, actionFn)
-    local g = CreateGroup()
-    GroupEnumUnitsInRange(g, x, y, r, filterFn and Condition(filterFn) or nil)
-    ForGroup(g, actionFn)
-    DestroyGroup(g)
+    enumClean(filterFn,
+        function(g, b) GroupEnumUnitsInRange(g, x, y, r, b) end,
+        function(g) ForGroup(g, actionFn) end)
 end
 
 function CountInRect(rect, filterFn)
-    local g = CreateGroup()
-    GroupEnumUnitsInRect(g, rect, filterFn and Condition(filterFn) or nil)
-    local n = CountUnitsInGroup(g)
-    DestroyGroup(g)
-    return n
+    return enumClean(filterFn,
+        function(g, b) GroupEnumUnitsInRect(g, rect, b) end, CountUnitsInGroup)
 end
 
 function ForUnitsInRect(rect, filterFn, actionFn)
-    local g = CreateGroup()
-    GroupEnumUnitsInRect(g, rect, filterFn and Condition(filterFn) or nil)
-    ForGroup(g, actionFn)
-    DestroyGroup(g)
+    enumClean(filterFn,
+        function(g, b) GroupEnumUnitsInRect(g, rect, b) end,
+        function(g) ForGroup(g, actionFn) end)
 end
 
 -- ── Timers ────────────────────────────────────────────────────────────────────

@@ -162,7 +162,7 @@ local function setupEngineer()
     end, function()
         local s = GetConstructingStructure()
         KillUnit(s)
-        DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(s)),
+        DisplayTextToPlayer(GetOwningPlayer(s), 0, 0,   -- GetForceOfPlayer would leak a force/cap-hit
             "You have too many buildings.  Gain more ranks of the Schematics skill to build more "
             .. "structures.  Your current max is: " .. tostring(EngineerMaxBuildings - 2))
     end)
@@ -805,7 +805,6 @@ local VENGEFUL_SPIRIT = {
     FourCC('n00N'), FourCC('n00O'), FourCC('n00P'), FourCC('n00Q'), FourCC('n00U'),
 }
 local UNDEAD_DISSIPATE = "Objects\\Spawnmodels\\Undead\\UndeadDissipate\\UndeadDissipate.mdl"
-local vengefulAnim   -- the last raise effect (destroyed before the next, as in the original)
 
 local function setupCryptguard()
     -- Vengeful Spirit Make: a fallen player hero rises as a spirit. Armed once the skill is learned.
@@ -818,9 +817,9 @@ local function setupCryptguard()
         local owner = GetOwningPlayer(dead)
         local x, y = GetUnitX(dead), GetUnitY(dead)
         local spirit = VENGEFUL_SPIRIT[VengefulSpiritLvl]
-        if vengefulAnim then DestroyEffect(vengefulAnim) end
-        vengefulAnim = AddSpecialEffect(UNDEAD_DISSIPATE, x, y)
-        TriggerSleepAction(2.0)
+        local anim = AddSpecialEffect(UNDEAD_DISSIPATE, x, y)
+        TriggerSleepAction(2.0)   -- let the dissipate play, then free it (no lingering handle)
+        DestroyEffect(anim)
         if spirit then CreateUnit(owner, spirit, x, y, bj_UNIT_FACING) end
     end)
     DisableTrigger(makeT)
@@ -838,7 +837,6 @@ local function setupCryptguard()
     -- back out to a random outer path (draining her mana per repel). Each rank cheapens the repel
     -- and the channel itself drains 5 mana/s; it ends when she stops or runs dry.
     local SPELL_SHIELD = "Abilities\\Spells\\Items\\SpellShieldAmulet\\SpellShieldCaster.mdl"
-    local havenAnim
     local havenCaster
     local TRANQUILITY = OrderId("tranquility")
 
@@ -848,18 +846,18 @@ local function setupCryptguard()
             and not IsUnitType(GetEnteringUnit(), UNIT_TYPE_HERO)
     end, function()
         local intruder = GetEnteringUnit()
-        if havenAnim then DestroyEffect(havenAnim) end
         if snd.HavenImpact then PlaySoundOnUnitBJ(snd.HavenImpact, 100, intruder) end
         local areas = { rct.WestPathOutside, rct.NorthPathOutside1, rct.NorthPathOutside2, rct.EastPathOutside }
         local loc = GetRandomLocInRect(areas[GetRandomInt(1, 4)])
         SetUnitPositionLoc(intruder, loc)
         RemoveLocation(loc)
-        havenAnim = AddSpecialEffectTarget(SPELL_SHIELD, intruder, "origin")
+        local anim = AddSpecialEffectTarget(SPELL_SHIELD, intruder, "origin")
         if havenCaster and GetUnitTypeId(havenCaster) ~= 0 then
             SetUnitState(havenCaster, UNIT_STATE_MANA,
                 GetUnitState(havenCaster, UNIT_STATE_MANA) - HavenManaRepelCost)
         end
         TriggerSleepAction(2.0)
+        DestroyEffect(anim)   -- free the repel shield once it has played
         IssuePointOrder(intruder, "patrol",
             GetRectCenterX(rct.EntranceToFortress), GetRectCenterY(rct.EntranceToFortress))
     end)
@@ -1068,6 +1066,9 @@ local function setupRockfighter()
     end, function()
         local caster = GetSpellAbilityUnit()
         local radius = 55.0 * GetHeroLevel(caster)
+        -- Clear first so the group only ever holds this cast's nearby enemies. (The JASS never
+        -- clears it — it would grow unboundedly with dead-unit refs and re-fear long-gone units.)
+        GroupClear(IntimShoutGroup)
         ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), radius, function()
             return GetOwningPlayer(GetFilterUnit()) == P9
         end, function()
@@ -1146,6 +1147,7 @@ local TOTEM_TYPES = {}
 for _, c in ipairs({ FourCC('o008'), FourCC('o009'), FourCC('o00A'), FourCC('o007') }) do
     TOTEM_TYPES[c] = true
 end
+local wolfEthereal = {}  -- summoned wolf → its attached glow effect (destroyed when the wolf disperses)
 
 -- One Tundra Strike volley: `count` shards at (tx,ty), each flung 5000 outward from the caster
 -- in its own random heading, cleared after a random delay.
@@ -1210,24 +1212,33 @@ local function setupTundraBarbarian()
         DestroyGroup(g)
     end)
 
-    -- Spirit Wolf Disperse (DEATH of a spirit totem): all summoned wolves vanish.
+    -- Spirit Wolf Disperse (DEATH of a spirit totem): all summoned wolves vanish (and their
+    -- attached glow effects are destroyed so they don't orphan on RemoveUnit).
     OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
         return TOTEM_TYPES[GetUnitTypeId(GetDyingUnit())] == true
     end, function()
         for _, code in ipairs(WOLF_TYPE_LIST) do
             local g = GetUnitsOfTypeIdAll(code)
-            ForGroup(g, function() RemoveUnit(GetEnumUnit()) end)
+            ForGroup(g, function()
+                local w = GetEnumUnit()
+                if wolfEthereal[w] then
+                    DestroyEffect(wolfEthereal[w])
+                    wolfEthereal[w] = nil
+                end
+                RemoveUnit(w)
+            end)
             DestroyGroup(g)
         end
     end)
 
-    -- Wolf Ethereal (a wolf spawns): ghostly tint + ziggurat-missile glow.
+    -- Wolf Ethereal (a wolf spawns): ghostly tint + ziggurat-missile glow (tracked so the glow
+    -- is freed when the wolf disperses).
     OnEnterRect(GetPlayableMapRect(), function()
         return WOLF_TYPES[GetUnitTypeId(GetEnteringUnit())] == true
     end, function()
         local w = GetEnteringUnit()
         SetUnitVertexColorBJ(w, 60.0, 100, 100, 50.0)
-        AddSpecialEffectTarget(WOLF_ETHEREAL_SFX, w, "origin")
+        wolfEthereal[w] = AddSpecialEffectTarget(WOLF_ETHEREAL_SFX, w, "origin")
     end)
 
     -- Wolf Wander (a wolf is attacked while >300×rank from its totem): leash it back to the totem.
@@ -1383,7 +1394,8 @@ local function setupWarGuard()
         RescueTarget = GetSpellTargetUnit()
         FloatText(RescueTarget, "Rescue!", 100, 100, 0, 2.0)
         if WarGuard then
-            DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(WarGuard)),
+            -- Message the War Guard's player directly (GetForceOfPlayer would leak a force/cast).
+            DisplayTextToPlayer(GetOwningPlayer(WarGuard), 0, 0,
                 "Rescue: " .. GetPlayerName(GetOwningPlayer(RescueTarget)))
         end
         EnableTrigger(rescueCastT)
