@@ -619,6 +619,128 @@ local function setupSharpshooter()
     end)
 end
 
+-- ══ Fire Magus (E01B) — war3map.j 42026-42563 ══════════════════════════════════
+-- The canonical Pattern-B class. Fireball (A0HZ): launches a missile whose tier scales with
+-- rank; on the missile's death it bursts for rank-scaled AoE (175/300/400/500) and, at high
+-- ranks, sprays cosmetic ember missiles. Fire Nova (A08O): a radiating ring of fire missiles
+-- (denser per rank) that burn enemies they pass (damage is the missile units' own — no death
+-- trigger), cleaned up after their lifetime.
+
+local DEG2RAD = bj_DEGTORAD
+
+-- Fireball: rank → launched missile type. (JASS Fireball[] 1..5 = e00G/e00H/e00I/e00P/e00P.)
+local FIREBALL_MISSILE = {
+    FourCC('e00G'), FourCC('e00H'), FourCC('e00I'), FourCC('e00P'), FourCC('e00P'),
+}
+-- Missile type → its impact (damage in 320 AoE + count of cosmetic e00K ember missiles).
+local FIREBALL_IMPACT = {
+    [FourCC('e00G')] = { dmg = 175.0, embers = 0 },
+    [FourCC('e00H')] = { dmg = 300.0, embers = 0 },
+    [FourCC('e00I')] = { dmg = 400.0, embers = 5 },
+    [FourCC('e00P')] = { dmg = 500.0, embers = 10 },
+}
+local FIRE_EMBER = FourCC('e00K')   -- cosmetic scatter missile
+local FIRE_IMPACT_SFX = FourCC('e00L')  -- impact flash dummy
+
+-- Fire Nova: rank → { ring missile, angle step (deg), missile lifetime }. (JASS FireNova[] +
+-- the Lv1..4 cast triggers: step 40/30/20/20, life 5/5/5/8, types e00M/e00N/e00O/e00O.)
+local FIRE_NOVA = {
+    { missile = FourCC('e00M'), step = 40, life = 5.0 },
+    { missile = FourCC('e00N'), step = 30, life = 5.0 },
+    { missile = FourCC('e00O'), step = 20, life = 5.0 },
+    { missile = FourCC('e00O'), step = 20, life = 8.0 },
+}
+
+local function setupFireMagus()
+    -- Fireball Learn (A0HZ): bump the rank (selects the missile tier).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0HZ')
+    end, function()
+        FireballRank = FireballRank + 1
+    end)
+
+    -- Fireball cast (A0HZ): launch the rank's missile straight ahead; kill it after 1–3s so its
+    -- death trigger bursts (the original's "order/kill all of type" collapses to one missile here).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0HZ')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local mtype = FIREBALL_MISSILE[FireballRank]
+        if not mtype then return end
+        local facing = GetUnitFacing(caster)
+        local rad = facing * DEG2RAD
+        local cx, cy = GetUnitX(caster), GetUnitY(caster)
+        local m = CreateUnit(GetOwningPlayer(caster), mtype,
+            cx + 110.0 * math.cos(rad), cy + 110.0 * math.sin(rad), facing)
+        if snd.FireBallMissileDeath then PlaySoundOnUnitBJ(snd.FireBallMissileDeath, 100, caster) end
+        IssuePointOrder(m, "move", cx + 2000.0 * math.cos(rad), cy + 2000.0 * math.sin(rad))
+        After(GetRandomReal(1.0, 3.0), function()
+            if GetUnitTypeId(m) ~= 0 then KillUnit(m) end
+        end)
+    end)
+
+    -- Fireball missile death: rank-scaled AoE burst + impact flash + (high ranks) ember spray.
+    OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return FIREBALL_IMPACT[GetUnitTypeId(GetDyingUnit())] ~= nil
+    end, function()
+        local missile = GetDyingUnit()
+        local info = FIREBALL_IMPACT[GetUnitTypeId(missile)]
+        local x, y = GetUnitX(missile), GetUnitY(missile)
+        if snd.CatapultMissile3 then
+            local loc = Location(x, y)
+            PlaySoundAtPointBJ(snd.CatapultMissile3, 100, loc, 0)
+            RemoveLocation(loc)
+        end
+        local flash = CreateUnit(P8, FIRE_IMPACT_SFX, x, y, bj_UNIT_FACING)
+        After(1.0, function() if GetUnitTypeId(flash) ~= 0 then RemoveUnit(flash) end end)
+        for _ = 1, info.embers do
+            local ang = GetRandomReal(0.0, 360.0) * DEG2RAD
+            local k = CreateUnit(P8, FIRE_EMBER, x, y, bj_UNIT_FACING)
+            IssuePointOrder(k, "move", x + 5000.0 * math.cos(ang), y + 5000.0 * math.sin(ang))
+            After(2.5, function() if GetUnitTypeId(k) ~= 0 then RemoveUnit(k) end end)
+        end
+        ForUnitsInRange(x, y, 320.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            UnitDamageTarget(missile, GetEnumUnit(), info.dmg, false, false,
+                ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        end)
+    end)
+
+    -- Fire Nova Learn (A08O): bump the rank (selects ring density + missile).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A08O')
+    end, function()
+        FireNovaRank = FireNovaRank + 1
+    end)
+
+    -- Fire Nova cast (A08O): spawn a full ring of outward-radiating fire missiles, owned by the
+    -- caster so they burn enemies; remove them after the rank's lifetime.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A08O')
+    end, function()
+        local spec = FIRE_NOVA[FireNovaRank]
+        if not spec then return end
+        local caster = GetSpellAbilityUnit()
+        local owner = GetOwningPlayer(caster)
+        local cx, cy = GetUnitX(caster), GetUnitY(caster)
+        if snd.FireBallMissileDeath then PlaySoundBJ(snd.FireBallMissileDeath) end
+        local ring = {}
+        for a = 0, 360, spec.step do
+            local rad = a * DEG2RAD
+            local m = CreateUnit(owner, spec.missile,
+                cx + 90.0 * math.cos(rad), cy + 90.0 * math.sin(rad), a)
+            IssuePointOrder(m, "move", cx + 2000.0 * math.cos(rad), cy + 2000.0 * math.sin(rad))
+            ring[#ring + 1] = m
+        end
+        After(spec.life, function()
+            for _, m in ipairs(ring) do
+                if GetUnitTypeId(m) ~= 0 then KillUnit(m) end
+            end
+        end)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -627,4 +749,5 @@ function RegisterAbilityTriggers()
     setupWildbond()
     setupAxeBrother()
     setupSharpshooter()
+    setupFireMagus()
 end

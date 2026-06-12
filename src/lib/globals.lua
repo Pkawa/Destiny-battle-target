@@ -386,6 +386,8 @@ FangStrikeActive               = false  -- true while a Fang Strike window is op
 AssaultMultiplier              = 0   -- Axe Brother Assault damage = KillsForAxeBrother × this (+15/rank)
 KillsForAxeBrother             = 0   -- units the Axe Brother has killed (feeds Assault damage)
 TotalAssaultDamage             = 0   -- last computed Assault hit (display)
+FireballRank                   = 0   -- ranks of Fireball (A0HZ) learned — picks the missile/damage tier
+FireNovaRank                   = 0   -- ranks of Fire Nova (A08O) learned — picks the ring density/missile
 TotalPlantKills                = 0   -- enemy units killed by Centaur Druid treant structures
 ElvenBlessingCount             = 0   -- times Cleric of Elven Word used Elven Blessing (A05C)
 FlameWreathCount               = 0   -- times Crested Drake used Flame Wreath (A05F)
