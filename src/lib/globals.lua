@@ -395,6 +395,7 @@ TundraStrikeRank               = 0   -- Tundra Barbarian Tundra Strike (A0BK) ra
 TotemicSpiritRank              = 0   -- Tundra Barbarian Spirit Wolf (A0BY) rank → which wolf/totem
 CurrentTotemicSpirit           = nil -- the active spirit totem the summoned wolves leash to
 BloodFeast                     = 0.0 -- Tundra Barbarian Blood Feast: %HP healed per kill (+4/rank)
+IllusionistPlayer              = nil -- owner of the Illusionist (H03I) — phantasm illusions transfer to them
 SolStrike                      = nil -- Sun Soul Initiate charging Sol Strike (the casting unit)
 SolStrikeAttacks               = 0   -- attacks landed since Sol Strike was cast
 SolStrikeTotalAttacks          = 0   -- attacks needed to discharge Sol Strike (+1/rank)

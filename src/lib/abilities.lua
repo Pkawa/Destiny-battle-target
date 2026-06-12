@@ -1478,6 +1478,94 @@ local function setupSunSoul()
     end)
 end
 
+-- ══ Illusionist (H03I) — war3map.j 43007-43152 ═════════════════════════════════
+-- A trickster. Blur (A0CF): every Illusionist shimmers to a random translucency, re-rolled every
+-- 10s. Phantasm (A0CH): her o00B phantasms cripple whatever they attack (via the E018 dummy's
+-- I073 item), get a Cripple glow on spawn, and illusions spawned under Player(11) transfer to her.
+
+local ILLUSIONIST = FourCC('H03I')
+local PHANTASM = FourCC('o00B')
+
+local function blurIllusionists()
+    local g = GetUnitsOfTypeIdAll(ILLUSIONIST)
+    ForGroup(g, function()
+        SetUnitVertexColorBJ(GetEnumUnit(), 100, 100, 100, GetRandomReal(10.0, 80.0))
+    end)
+    DestroyGroup(g)
+end
+
+local function setupIllusionist()
+    -- Give the E018 dummy the I073 cripple item once, so its phantasms can proc it (war3map.j 17013).
+    local phantasmItem
+    if unit_E018 and GetUnitTypeId(unit_E018) ~= 0 then
+        phantasmItem = CreateItem(FourCC('I073'), GetUnitX(unit_E018), GetUnitY(unit_E018))
+        UnitAddItem(unit_E018, phantasmItem)
+    end
+
+    -- Blur (10s periodic, armed on learn): re-roll every Illusionist's translucency.
+    local blurT = CreateTrigger()
+    DisableTrigger(blurT)
+    TriggerRegisterTimerEventPeriodic(blurT, 10.0)
+    TriggerAddAction(blurT, blurIllusionists)
+
+    -- Blur Learn (A0CF): shimmer now + arm the periodic re-roll.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0CF')
+    end, function()
+        blurIllusionists()
+        EnableTrigger(blurT)
+    end)
+
+    -- Phantasm Enter (a phantasm spawns): give it a Cripple glow (tracked so it frees on death).
+    local phantasmGlow = {}
+    OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == PHANTASM
+    end, function()
+        local p = GetEnteringUnit()
+        phantasmGlow[p] = AddSpecialEffectTarget(
+            "Abilities\\Spells\\Undead\\Cripple\\CrippleTarget.mdl", p, "origin")
+    end)
+    OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetDyingUnit()) == PHANTASM
+    end, function()
+        local d = GetDyingUnit()
+        if phantasmGlow[d] then
+            DestroyEffect(phantasmGlow[d])
+            phantasmGlow[d] = nil
+        end
+    end)
+
+    -- Phantasm (a phantasm attacks a real, non-structure, non-illusion unit): cripple it via the
+    -- dummy's item.
+    OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        local victim = GetAttackedUnitBJ()
+        return GetUnitTypeId(GetAttacker()) == PHANTASM
+            and GetUnitTypeId(victim) ~= PHANTASM
+            and not IsUnitType(victim, UNIT_TYPE_STRUCTURE)
+            and not IsUnitIllusion(victim)
+    end, function()
+        if unit_E018 and phantasmItem then
+            UnitUseItemTarget(unit_E018, phantasmItem, GetAttackedUnitBJ())
+        end
+    end)
+
+    -- Phantasm Learn (A0CH): record the Illusionist's owner (one-time).
+    local learnT
+    learnT = OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0CH')
+    end, function()
+        IllusionistPlayer = GetOwningPlayer(GetLearningUnit())
+        DisableTrigger(learnT)
+    end)
+
+    -- Phantasm Give (an illusion spawns under Player(11)): hand it to the Illusionist.
+    OnEnterRect(GetPlayableMapRect(), function()
+        return IsUnitIllusion(GetEnteringUnit()) and GetOwningPlayer(GetEnteringUnit()) == Player(11)
+    end, function()
+        if IllusionistPlayer then SetUnitOwner(GetEnteringUnit(), IllusionistPlayer, true) end
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -1494,4 +1582,5 @@ function RegisterAbilityTriggers()
     setupTundraBarbarian()
     setupWarGuard()
     setupSunSoul()
+    setupIllusionist()
 end
