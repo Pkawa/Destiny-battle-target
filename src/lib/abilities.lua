@@ -793,6 +793,166 @@ local function setupHorizonWanderer()
         SetUnitScalePercent(caster, 100.0, 100.0, 100.0)
         SetUnitPathing(caster, true)
     end)
+
+    -- Skillshot (A0B7, SPELL_FINISH): AGI*3 damage to the target; then a 1-80 roll vs INT may
+    -- chase it with a "slow" from the support dummy (otherwise it resists).
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_FINISH, function()
+        return GetSpellAbilityId() == FourCC('A0B7')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local target = GetSpellTargetUnit()
+        UnitDamageTarget(caster, target, GetHeroAgi(caster, true) * 3.0, false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        if target then FloatText(target, "+" .. tostring(GetHeroAgi(caster, true) * 3), 100, 0, 0, 3.0) end
+        SkillshotChance = GetRandomInt(1, 80)
+        TriggerSleepAction(1.0)
+        if SkillshotChance <= GetHeroInt(caster, true) then
+            TriggerSleepAction(1.0)
+            if unit_e00V then IssueTargetOrder(unit_e00V, "slow", target) end
+            if target then FloatText(target, "Slowed!", 100, 0, 0, 2.0) end
+        else
+            TriggerSleepAction(1.0)
+            if target then FloatText(target, "Resisted!", 100, 0, 0, 2.0) end
+        end
+    end)
+
+    -- Hew Learn (A00A): +40 base cleave damage per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A00A')
+    end, function()
+        HewDamage = HewDamage + 40.0
+    end)
+
+    -- Hew (A00A, SPELL_EFFECT): cleave every Player(9) enemy within AGI*6.5 for HewDamage + STR*4,
+    -- splatter blood on everything within AGI*10, then float a "+STR*5" tag over the caster.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A00A')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local cx, cy = GetUnitX(caster), GetUnitY(caster)
+        local dmg = HewDamage + GetHeroStr(caster, true) * 4.0
+        ForUnitsInRange(cx, cy, GetHeroAgi(caster, true) * 6.5, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            UnitDamageTarget(caster, GetEnumUnit(), dmg, false, false,
+                ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        end)
+        ForUnitsInRange(cx, cy, GetHeroAgi(caster, true) * 10.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            DestroyEffect(AddSpecialEffectTarget(
+                "Objects\\Spawnmodels\\Human\\HumanBlood\\HumanBloodKnight.mdl", GetEnumUnit(), "origin"))
+        end)
+        TriggerSleepAction(1.0)
+        FloatText(caster, "+" .. tostring(GetHeroStr(caster, true) * 5), 100, 0, 0, 2.0)
+    end)
+
+    -- Recuperate Learn (A0B9): +1 heal multiplier per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0B9')
+    end, function()
+        RecuperateMultiplier = RecuperateMultiplier + 1.0
+    end)
+
+    -- Recuperate (A0B9, SPELL_EFFECT): heal the caster (mult*60 + STR*mult); a 1-80 roll vs INT may
+    -- follow with an inner fire from the support dummy.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0B9')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local target = GetSpellTargetUnit()
+        SetUnitState(caster, UNIT_STATE_LIFE,
+            GetUnitState(caster, UNIT_STATE_LIFE) + RecuperateMultiplier * 60.0 + GetHeroStr(caster, true) * RecuperateMultiplier)
+        TriggerSleepAction(1.0)
+        if target then
+            FloatText(target, "+" .. tostring(math.floor(GetHeroStr(caster, true) * RecuperateMultiplier)), 0, 100, 0, 2.0)
+        end
+        RecuperateChance = GetRandomInt(1, 80)
+        TriggerSleepAction(1.0)
+        if RecuperateChance <= GetHeroInt(caster, true) then
+            TriggerSleepAction(1.0)
+            if unit_e00V then IssueTargetOrder(unit_e00V, "innerfire", caster) end
+            if target then FloatText(target, "Inner Fire!", 0, 100, 0, 2.0) end
+        else
+            TriggerSleepAction(1.0)
+            if target then FloatText(target, "Strained!", 100, 0, 0, 2.0) end
+        end
+    end)
+
+    -- ── Traveler's Tricks (A0BA) — a rank-gated on-attack proc ──────────────────
+    -- Once learned, each of the Wanderer's attacks rolls STR/AGI/INT vs random 1-100; the first
+    -- passing stat fires its effect (STR=cleave+slow, AGI=bloodlust on self, INT=faerie fire/cripple).
+    -- The proc trigger disables itself for the duration of its sleep cascade so it can't re-enter.
+    -- Three rank tiers escalate the cleave damage and swap faerie fire → cripple. (JASS targeted the
+    -- slow at GetSpellTargetUnit() — null in an attack context, an apparent bug; we target the
+    -- attacked unit so the slow lands as intended.)
+    local function travelProc(strExtra, useFalseStat, intOrder)
+        return function()
+            local self = GetTriggeringTrigger()
+            DisableTrigger(self)
+            HWIntChance = GetRandomInt(1, 100)
+            HWDexChance = GetRandomInt(1, 100)
+            HWStrChance = GetRandomInt(1, 100)
+            local atk = GetAttacker()
+            local victim = GetTriggerUnit()
+            TriggerSleepAction(1.0)
+            if HWStrChance <= GetHeroStr(atk, true) then
+                TriggerSleepAction(1.0)
+                if unit_e00V then IssueTargetOrder(unit_e00V, "slow", victim) end
+                local dmg = GetHeroStr(atk, true) + strExtra(atk)
+                FloatText(victim, "+" .. tostring(math.floor(dmg)), 100, 0, 0, 2.0)
+                UnitDamageTarget(atk, victim, dmg, false, false,
+                    ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+                EnableTrigger(self)
+                return
+            end
+            TriggerSleepAction(1.0)
+            local agiStat = useFalseStat and (GetHeroAgi(atk, false) + 25) or GetHeroAgi(atk, true)
+            if HWDexChance <= agiStat then
+                TriggerSleepAction(1.0)
+                if unit_e00V then IssueTargetOrder(unit_e00V, "bloodlust", atk) end
+                EnableTrigger(self)
+                return
+            end
+            TriggerSleepAction(1.0)
+            local intStat = useFalseStat and (GetHeroInt(atk, false) + 25) or GetHeroInt(atk, true)
+            if HWIntChance <= intStat then
+                TriggerSleepAction(1.0)
+                if unit_e00V then IssueTargetOrder(unit_e00V, intOrder, victim) end
+                EnableTrigger(self)
+                return
+            end
+            TriggerSleepAction(1.0)
+            EnableTrigger(self)
+        end
+    end
+
+    local function isWandererAttacker() return GetUnitTypeId(GetAttacker()) == FourCC('E011') end
+    local lv1T = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, isWandererAttacker,
+        travelProc(function() return 0 end, false, "faeriefire"))
+    local lv2T = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, isWandererAttacker,
+        travelProc(function(atk) return GetHeroLevel(atk) + 16 end, false, "cripple"))
+    local lv3T = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, isWandererAttacker,
+        travelProc(function(atk) return GetHeroLevel(atk) + 44 end, true, "cripple"))
+    DisableTrigger(lv1T); DisableTrigger(lv2T); DisableTrigger(lv3T)
+
+    -- Traveler's Tricks Learn (A0BA): rank up and swap in the matching proc tier (+ the dummy's
+    -- support-spell ability at rank 2: A0BE → A0BH).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0BA')
+    end, function()
+        TravelerTricksCurrentLevel = TravelerTricksCurrentLevel + 1
+        if TravelerTricksCurrentLevel == 1 then
+            EnableTrigger(lv1T)
+        elseif TravelerTricksCurrentLevel == 2 then
+            DisableTrigger(lv1T); EnableTrigger(lv2T)
+            if unit_e00V then
+                UnitRemoveAbility(unit_e00V, FourCC('A0BE')); UnitAddAbility(unit_e00V, FourCC('A0BH'))
+            end
+        elseif TravelerTricksCurrentLevel == 3 then
+            DisableTrigger(lv2T); EnableTrigger(lv3T)
+        end
+    end)
 end
 
 -- ══ Elven Cryptguard (E019) — war3map.j 41839-41897 ════════════════════════════
@@ -2211,6 +2371,526 @@ local function setupBorderSkirmisher()
     end)
 end
 
+-- ══ Centaur Druid (H01U) — war3map.j 38038-38384 ═══════════════════════════════
+-- A nature-summoner. Treants (Cultivate, A04N): summons a tier-1 treant; treants are a downgrade
+-- chain — a higher-tier treant, on death, leaves the next-lower tier in its place (h024→…→h01V).
+-- The summon is capped: if the druid owns more structures than CentaurTreantTotal, casting culls a
+-- treant instead. Explosive Vegetation / Explosive Growth (A04T): scatters a ring of 12 clusters of
+-- explosive plants (h025), ExplosiveGrowth per cluster, that all vanish after 20s. Spirit of the
+-- Wood (A04S): a button-unlock — learning it grants the A058 ability.
+
+-- Treant downgrade chain: a dying treant of tier N+1 leaves a tier-N treant (war3map.j 38150-38345).
+local TREANT_DOWNGRADE = {
+    [FourCC('h01W')] = FourCC('h01V'), [FourCC('h01X')] = FourCC('h01W'),
+    [FourCC('h01Y')] = FourCC('h01X'), [FourCC('h01Z')] = FourCC('h01Y'),
+    [FourCC('h020')] = FourCC('h01Z'), [FourCC('h021')] = FourCC('h020'),
+    [FourCC('h022')] = FourCC('h021'), [FourCC('h023')] = FourCC('h022'),
+    [FourCC('h024')] = FourCC('h023'),
+}
+-- Explosive Growth: the 12 plant-cluster offsets around the caster (war3map.j 38362-38373).
+local EXPLOSIVE_OFFSETS = {
+    { -90, -90 }, { 0, -90 }, { 90, -90 }, { 90, 0 }, { 90, 90 }, { 0, 90 },
+    { -90, 90 }, { -90, 0 }, { -180, 0 }, { 180, 0 }, { 0, 180 }, { 0, -180 },
+}
+local EXPLOSIVE_PLANT = FourCC('h025')
+local TREANT_T1 = FourCC('h01V')
+
+local function setupCentaurDruid()
+    -- Treant downgrade (DEATH of any chained treant): leave the next-lower tier in its place.
+    OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return TREANT_DOWNGRADE[GetUnitTypeId(GetDyingUnit())] ~= nil
+    end, function()
+        local dead = GetDyingUnit()
+        CreateUnit(GetOwningPlayer(dead), TREANT_DOWNGRADE[GetUnitTypeId(dead)],
+            GetUnitX(dead), GetUnitY(dead), bj_UNIT_FACING)
+    end)
+
+    -- Treant Learn (A04N, while under 5 ranks): record the druid + raise the treant cap.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A04N') and CentaurTreantTotal < 5
+    end, function()
+        CentaurDruidPlayer = GetOwningPlayer(GetLearningUnit())
+        CentaurTreantTotal = CentaurTreantTotal + 1
+    end)
+
+    -- Cultivate Druid (cast A04N): after 1s, summon a tier-1 treant — unless the druid already owns
+    -- more structures than the cap, in which case cull a treant of each lower tier instead.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A04N')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        TriggerSleepAction(1.0)
+        local g = GetUnitsOfPlayerMatching(CentaurDruidPlayer, Condition(function()
+            return IsUnitType(GetFilterUnit(), UNIT_TYPE_STRUCTURE)
+        end))
+        local structures = CountUnitsInGroup(g)
+        DestroyGroup(g)
+        if structures > CentaurTreantTotal then
+            local g1 = GetUnitsOfTypeIdAll(TREANT_T1)
+            local t1 = GroupPickRandomUnit(g1); DestroyGroup(g1)
+            if t1 then KillUnit(t1) end
+            local g2 = GetUnitsOfTypeIdAll(FourCC('h01W'))
+            local t2 = GroupPickRandomUnit(g2); DestroyGroup(g2)
+            if t2 then KillUnit(t2) end
+            if CentaurDruidPlayer then
+                DisplayTextToPlayer(CentaurDruidPlayer, 0, 0, "You cannot build more treants right now.")
+            end
+        else
+            CreateUnit(GetOwningPlayer(caster), TREANT_T1, GetUnitX(caster), GetUnitY(caster), bj_UNIT_FACING)
+        end
+    end)
+
+    -- Explosive Vegetation Learn (A04T): record the druid + +1 plant per cluster.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A04T')
+    end, function()
+        CentaurDruidPlayer = GetOwningPlayer(GetLearningUnit())
+        ExplosiveGrowth = ExplosiveGrowth + 1
+    end)
+
+    -- Explosive Growth (cast A04T): scatter 12 clusters of ExplosiveGrowth plants around the caster,
+    -- then sweep every h025 off the map after 20s. (Faithful: the sweep is global — overlapping
+    -- casts share the 20s window.)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A04T')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local cx, cy = GetUnitX(caster), GetUnitY(caster)
+        for _, off in ipairs(EXPLOSIVE_OFFSETS) do
+            for _ = 1, ExplosiveGrowth do
+                CreateUnit(CentaurDruidPlayer, EXPLOSIVE_PLANT, cx + off[1], cy + off[2], bj_UNIT_FACING)
+            end
+        end
+        TriggerSleepAction(20.0)
+        local g = GetUnitsOfTypeIdAll(EXPLOSIVE_PLANT)
+        ForGroup(g, function() RemoveUnit(GetEnumUnit()) end)
+        DestroyGroup(g)
+    end)
+
+    -- Spirit of the Wood button (A04S learn): grant the A058 ability.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A04S')
+    end, function()
+        UnitAddAbility(GetLearningUnit(), FourCC('A058'))
+    end)
+end
+
+-- ══ Crested Drake (H02D) — war3map.j 38983-39341 ═══════════════════════════════════
+-- A fire drake. Flame Wreath (A05F): a single-target burn that ticks 1s after cast for a
+-- ramping amount. Torch (A05I): three 1s-spaced AoE burns around the target point. Drake Fang
+-- (A05H): a one-time button that unlocks the A05M ability. Salamando (A05L, ultimate): summons a
+-- fire elemental (h02E) that wanders the map and scatters short-lived flames (h02F) as it roams.
+
+local SALAMANDO = FourCC('h02E')
+local SALAMANDO_FLAME = FourCC('h02F')
+local SALA_FIRE_FX = "Abilities\\Weapons\\FireBallMissile\\FireBallMissile.mdl"
+
+local function setupCrestedDrake()
+    -- Flame Wreath Learn (A05F): +50 burn damage per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A05F')
+    end, function()
+        FlameWreathDamage = FlameWreathDamage + 50
+    end)
+
+    -- Flame Wreath (effect A05F): 1s after cast, burn the target for FlameWreathDamage.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A05F')
+    end, function()
+        local caster, target = GetSpellAbilityUnit(), GetSpellTargetUnit()
+        TriggerSleepAction(1.0)
+        UnitDamageTarget(caster, target, FlameWreathDamage * 1.0, false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+    end)
+
+    -- Drake Fang Learn (A05H): one-time — unlock the A05M ability, then disarm.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A05H')
+    end, function()
+        DisableTrigger(GetTriggeringTrigger())
+        UnitAddAbility(GetLearningUnit(), FourCC('A05M'))
+    end)
+
+    -- Torch Learn (A05I): +250 burn damage per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A05I')
+    end, function()
+        TorchDamage = TorchDamage + 250.0
+    end)
+
+    -- Torch (cast A05I): three 1s-spaced waves, each burning every Player(9) unit within 175 of
+    -- the target point for TorchDamage. (Coords captured before the first sleep — the spell-target
+    -- context is gone once the thread yields.)
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A05I')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local tx, ty = GetSpellTargetX(), GetSpellTargetY()
+        local function wave()
+            TriggerSleepAction(1.0)
+            ForUnitsInRange(tx, ty, 175.0, function()
+                return GetOwningPlayer(GetFilterUnit()) == P9
+            end, function()
+                UnitDamageTarget(caster, GetEnumUnit(), TorchDamage, false, false,
+                    ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+            end)
+        end
+        wave(); wave(); wave()
+    end)
+
+    -- Salamando SFX (h02E enters the map): cloak the new elemental in fireball effects on each
+    -- attach point. (Faithful leak: like the JASS, these attachments are never destroyed.)
+    OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == SALAMANDO
+    end, function()
+        local u = GetEnteringUnit()
+        AddSpecialEffectTarget(SALA_FIRE_FX, u, "head")
+        AddSpecialEffectTarget(SALA_FIRE_FX, u, "origin")
+        AddSpecialEffectTarget(SALA_FIRE_FX, u, "weapon")
+        AddSpecialEffectTarget(SALA_FIRE_FX, u, "chest")
+        AddSpecialEffectTarget(SALA_FIRE_FX, u, "hand,left")
+        AddSpecialEffectTarget(SALA_FIRE_FX, u, "hand,right")
+    end)
+
+    -- Salamando Flame Upkeep (h02F enters the map): each flame self-removes after 15s.
+    OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == SALAMANDO_FLAME
+    end, function()
+        local flame = GetEnteringUnit()
+        TriggerSleepAction(15.0)
+        RemoveUnit(flame)
+    end)
+
+    -- The two parallel Salamando loops are persistent no-event triggers, TriggerExecute'd per cast.
+    -- Like the JASS, both read the shared global Salamando (so overlapping casts collide on the last
+    -- summon — quirk preserved); each guards against the elemental already being gone.
+
+    -- Roam loop: 20 random 750-range hops (1.5s apart, ~30s), then despawn the elemental.
+    local commandsTrig = CreateTrigger()
+    TriggerAddAction(commandsTrig, function()
+        for _ = 1, 20 do
+            local s = Salamando
+            if GetUnitTypeId(s) == 0 then return end
+            IssuePointOrder(s, "move",
+                GetUnitX(s) + GetRandomReal(-750.0, 750.0),
+                GetUnitY(s) + GetRandomReal(-750.0, 750.0))
+            TriggerSleepAction(1.5)
+        end
+        RemoveUnit(Salamando)
+    end)
+
+    -- Flame-scatter loop: 2 flames up front, then 38 more at 0.75s intervals, each at the elemental.
+    local flamesTrig = CreateTrigger()
+    TriggerAddAction(flamesTrig, function()
+        local function flame()
+            local s = Salamando
+            if GetUnitTypeId(s) == 0 then return end
+            CreateUnit(P8, SALAMANDO_FLAME, GetUnitX(s), GetUnitY(s), bj_UNIT_FACING)
+        end
+        TriggerSleepAction(1.0)
+        flame(); flame()
+        for _ = 1, 38 do
+            TriggerSleepAction(0.75)
+            flame()
+        end
+    end)
+
+    -- Salamando (cast A05L): after 1s, roar + summon the elemental at the caster, then 1s later
+    -- kick off the roam and flame loops.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A05L')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        TriggerSleepAction(1.0)
+        if snd.BattleRoar01 then PlaySoundBJ(snd.BattleRoar01) end
+        Salamando = CreateUnit(P8, SALAMANDO, GetUnitX(caster), GetUnitY(caster), bj_UNIT_FACING)
+        TriggerSleepAction(1.0)
+        TriggerExecute(flamesTrig)
+        TriggerExecute(commandsTrig)
+    end)
+end
+
+-- ══ Dwarven Trueborn (H041) — war3map.j 40663-41079 ════════════════════════════════
+-- A fiery axe-dwarf. Lava Axe (A0I0): a 5-rank passive — each of his attacks lobs a widening
+-- spread of self-propelled fireballs (e01F) that fly forward and burn out. Petrify (A0I9): a
+-- target-effect with three rank-gated outcomes (capture a creep, stasis-shield an ally, or freeze
+-- an enemy hero). Ignius Pyre (A0I4): a cosmetic eruption on every enemy near the caster.
+
+local TRUEBORN = FourCC('H041')
+local LAVA_FIREBALL = FourCC('e01F')
+local LORD_OF_FLAME_FX = "Abilities\\Weapons\\LordofFlameMissile\\LordofFlameMissile.mdl"
+local PYRE_FX = "Objects\\Spawnmodels\\Other\\NeutralBuildingExplosion\\NeutralBuildingExplosion.mdl"
+-- LAVA_AXE_PATTERN[rank] = list of {position-angle offset, facing offset} relative to attacker facing.
+-- (Rank 3's second bolt keeps the JASS quirk: spawned at +25 but faces +20.)
+local LAVA_AXE_PATTERN = {
+    [1] = { {0, 0} },
+    [2] = { {-20, -20}, {20, 20} },
+    [3] = { {-25, -25}, {25, 20}, {0, 0} },
+    [4] = { {-40, -40}, {-15, -15}, {15, 15}, {40, 40} },
+    [5] = { {-40, -40}, {-15, -15}, {15, 15}, {40, 40}, {0, 0} },
+}
+
+local function setupDwarvenTrueborn()
+    -- Lava Axe Learn (A0I0): +1 rank; the first rank tags the Trueborn's weapon with a flame model.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0I0')
+    end, function()
+        local hero = GetLearningUnit()
+        LavaAxeLearn = LavaAxeLearn + 1
+        if LavaAxeLearn == 1 then
+            TriggerSleepAction(1.0)
+            AddSpecialEffectTarget(LORD_OF_FLAME_FX, hero, "weapon")  -- faithful leak (one-time cosmetic)
+        end
+    end)
+
+    -- Lava Axe Fireball (any attack by the Trueborn): lob the rank's fireball spread, then a 1s
+    -- cooldown. (The JASS swapped between five gated Lv-triggers; one trigger + a flag is equivalent,
+    -- since only the current rank's pattern ever fires.)
+    local lavaCooldown = false
+    OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return LavaAxeLearn >= 1 and not lavaCooldown and GetUnitTypeId(GetAttacker()) == TRUEBORN
+    end, function()
+        local pat = LAVA_AXE_PATTERN[LavaAxeLearn]
+        if not pat then return end
+        lavaCooldown = true
+        local atk = GetAttacker()
+        local owner = GetOwningPlayer(atk)
+        local x, y, face = GetUnitX(atk), GetUnitY(atk), GetUnitFacing(atk)
+        for _, off in ipairs(pat) do
+            local rad = (face + off[1]) * DEG2RAD
+            CreateUnit(owner, LAVA_FIREBALL, x + 30.0 * math.cos(rad), y + 30.0 * math.sin(rad), face + off[2])
+        end
+        After(1.0, function() lavaCooldown = false end)
+    end)
+
+    -- Lava Axe Fireballs Remove (e01F enters map): each fireball charges 2000 forward, then dies in 2s.
+    OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == LAVA_FIREBALL
+    end, function()
+        local fb = GetEnteringUnit()
+        local rad = GetUnitFacing(fb) * DEG2RAD
+        IssuePointOrder(fb, "move", GetUnitX(fb) + 2000.0 * math.cos(rad), GetUnitY(fb) + 2000.0 * math.sin(rad))
+        TriggerSleepAction(2.0)
+        KillUnit(fb)
+    end)
+
+    -- Petrify Learn (A0I9): +1 rank (unlocks the ally-stasis branch at >=2, enemy-hero at >=3).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0I9')
+    end, function()
+        Petrify = Petrify + 1
+    end)
+
+    -- Petrify (effect A0I9): ~1s after cast, branch by target type (same order as the JASS).
+    -- Target captured locally so overlapping casts don't collide; PetrifyTarget published for readers.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0I9')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local target = GetSpellTargetUnit()
+        PetrifyTarget = target
+        TriggerSleepAction(1.01)
+        local isP9 = GetOwningPlayer(target) == P9
+        local isHero = IsUnitType(target, UNIT_TYPE_HERO)
+        if isP9 and not isHero then
+            -- Capture: permanently petrify the enemy creep and convert it to the caster's side.
+            SetUnitTimeScalePercent(target, 0.0)
+            SetUnitVertexColorBJ(target, 3, 3, 3, 0)
+            PauseUnit(target, true)
+            SetUnitOwner(target, GetOwningPlayer(caster), false)
+        elseif (not isP9) and Petrify >= 2 then
+            -- Ally stasis: 10s invulnerable freeze, then thaw + heal 25% of max life.
+            TriggerSleepAction(1.0)
+            SetUnitTimeScalePercent(target, 0.0)
+            SetUnitVertexColorBJ(target, 3, 3, 3, 0)
+            PauseUnit(target, true)
+            SetUnitInvulnerable(target, true)
+            TriggerSleepAction(10.0)
+            SetUnitTimeScalePercent(target, 100.0)
+            SetUnitVertexColorBJ(target, 100, 100, 100, 0)
+            PauseUnit(target, false)
+            SetUnitInvulnerable(target, false)
+            SetUnitLifePercentBJ(target, GetUnitLifePercent(target) + 25.0)
+        elseif isP9 and isHero and Petrify >= 3 then
+            -- Enemy-hero freeze: 4s hard stop, then a graded thaw over ~6s.
+            SetUnitTimeScalePercent(target, 0.0)
+            SetUnitVertexColorBJ(target, 3, 3, 3, 0)
+            PauseUnit(target, true)
+            TriggerSleepAction(4.0)
+            SetUnitMoveSpeed(target, 40.0); SetUnitTimeScalePercent(target, 20.0); SetUnitVertexColorBJ(target, 20, 20, 20, 0)
+            PauseUnit(target, false)
+            TriggerSleepAction(1.0)
+            SetUnitMoveSpeed(target, 80.0); SetUnitTimeScalePercent(target, 40.0); SetUnitVertexColorBJ(target, 40, 40, 40, 0)
+            TriggerSleepAction(1.0)
+            SetUnitMoveSpeed(target, 120.0); SetUnitTimeScalePercent(target, 60.0); SetUnitVertexColorBJ(target, 60, 60, 60, 0)
+            TriggerSleepAction(2.0)
+            SetUnitMoveSpeed(target, 150.0); SetUnitTimeScalePercent(target, 80.0); SetUnitVertexColorBJ(target, 80, 80, 80, 0)
+            TriggerSleepAction(2.0)
+            SetUnitMoveSpeed(target, GetUnitDefaultMoveSpeed(target))
+            SetUnitTimeScalePercent(target, 100.0); SetUnitVertexColorBJ(target, 100, 100, 100, 0)
+        end
+    end)
+
+    -- Ignius Pyre (effect A0I4): a cosmetic eruption overhead on every Player(9) unit within 550.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0I4')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), 550.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            DestroyEffect(AddSpecialEffectTarget(PYRE_FX, GetEnumUnit(), "overhead"))
+        end)
+    end)
+end
+
+-- ══ Wilderness Runner (H02U) — war3map.j 33923, 47082-47448 ════════════════════════
+-- Leylana the pathfinder. Root Trap (A09M): drops a trap unit (h02Y) ahead; when something
+-- attacks it, the trap bursts into a ring of timed root-units. Forage (A09V): conjures a random
+-- item from a rank-scaled loot pool. Survivalist (A0A5): a 5-rank passive that swaps in a stronger
+-- aura each rank. Preparation (A0A7): targets an ally — refreshes all their cooldowns (or, if the
+-- target is another Runner, heals 50% instead). Birth of Thorns (A0A8): summons a thornbush that
+-- repeatedly casts fan-of-knives for 30s.
+
+local RUNNER = FourCC('H02U')
+local ROOT_TRAP = FourCC('h02Y')          -- the placed trap unit (triggers on being attacked)
+local THORNBUSH = FourCC('h033')
+local TIMED_LIFE = FourCC('BTLF')         -- generic timed-life buff used by the spawned units
+-- Root Trap burst angles (war3map.j 47140-47156): a near-full ring, plus a duplicate at 360 and
+-- one extra root at the trap's own location (appended in code).
+local ROOT_TRAP_ANGLES = { 45, 90, 135, 180, 225, 270, 315, 360, 360 }
+
+local function setupWildernessRunner()
+    -- Forage Init (war3map.j 33923, fires 40s after start): populate the forageable-item pool.
+    After(40.0, function()
+        local ids = {
+            'I01Y','I0AI','I041','I040','I03Z','I042','I05M','I05I','I05J','I05L','I05K',
+            'I05O','I05P','I05N','I05S','I05Q','I05R',
+        }
+        for i = 0, 16 do ForageItems[i] = FourCC(ids[i + 1]) end
+    end)
+
+    -- Root Trap Learn (A09M): set the per-rank root-unit table, then bump the rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A09M')
+    end, function()
+        RootTrapUnits[1] = FourCC('h02Z')
+        RootTrapUnits[2] = FourCC('h030')
+        RootTrapUnits[3] = FourCC('h031')
+        RootTrapUnits[4] = FourCC('h032')
+        RootTrapUnits[5] = FourCC('h032')
+        CurrentRootTrapLevel = CurrentRootTrapLevel + 1
+    end)
+
+    -- Root Trap Cast (A09M effect): drop the trap 200 ahead of the caster; it self-destructs in 20s.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A09M')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local rad = GetUnitFacing(caster) * DEG2RAD
+        local trap = CreateUnit(GetOwningPlayer(caster), ROOT_TRAP,
+            GetUnitX(caster) + 200.0 * math.cos(rad), GetUnitY(caster) + 200.0 * math.sin(rad), bj_UNIT_FACING)
+        UnitApplyTimedLife(trap, TIMED_LIFE, 20.0)
+    end)
+
+    -- Root Trap Trigger (a trap is attacked): burst a ring of timed root-units around it.
+    OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetUnitTypeId(GetAttacker()) == ROOT_TRAP
+    end, function()
+        local trap = GetAttacker()
+        local owner = GetOwningPlayer(trap)
+        local rootId = RootTrapUnits[CurrentRootTrapLevel]
+        if not rootId then return end
+        local tx, ty = GetUnitX(trap), GetUnitY(trap)
+        for _, ang in ipairs(ROOT_TRAP_ANGLES) do
+            local rad = ang * DEG2RAD
+            local u = CreateUnit(owner, rootId, tx + 250.0 * math.cos(rad), ty + 250.0 * math.sin(rad), bj_UNIT_FACING)
+            UnitApplyTimedLife(u, TIMED_LIFE, 20.0)
+        end
+        local center = CreateUnit(owner, rootId, tx, ty, bj_UNIT_FACING)
+        UnitApplyTimedLife(center, TIMED_LIFE, 20.0)
+    end)
+
+    -- Forage Learn (A09V, real unit only): +1 rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A09V') and not IsUnitIllusion(GetLearningUnit())
+    end, function()
+        CurrentForage = CurrentForage + 1
+    end)
+
+    -- Forage Cast (A09V effect): conjure one random item from the rank's loot range at the caster.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A09V')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local x, y = GetUnitX(caster), GetUnitY(caster)
+        local p = GetOwningPlayer(caster)
+        -- per-rank {lo, hi} index range into ForageItems (war3map.j 47327-47357)
+        local lo, hi
+        if     CurrentForage == 1 then lo, hi = 1, 5
+        elseif CurrentForage == 2 then lo, hi = 1, 10
+        elseif CurrentForage == 3 then lo, hi = 1, 13
+        elseif CurrentForage == 4 then lo, hi = 6, 16
+        elseif CurrentForage == 5 then lo, hi = 11, 15 end
+        if lo then
+            CreateItem(ForageItems[GetRandomInt(lo, hi)], x, y)
+            DisplayTextToPlayer(p, 0, 0, "|cff66cc66You forage the wilds and find something useful.|r")
+        end
+        DisplayTextToPlayer(p, 0, 0, "Forage #: " .. tostring(CurrentForage))
+    end)
+
+    -- Survivalist (A0A5 learn): bump the rank, then swap in this rank's aura ability.
+    -- (The JASS cascaded five 1s-gated checks; since only one rank's branch ever matches per learn,
+    -- a single post-sleep branch is equivalent.)
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0A5')
+    end, function()
+        local hero = GetLearningUnit()
+        SurvivalistRank = SurvivalistRank + 1
+        TriggerSleepAction(1.0)
+        if SurvivalistRank == 1 then
+            UnitAddAbility(hero, FourCC('A0A6')); UnitAddAbility(hero, FourCC('A0AY'))
+        elseif SurvivalistRank == 2 then
+            UnitRemoveAbility(hero, FourCC('A0AY')); UnitAddAbility(hero, FourCC('A0B0'))
+        elseif SurvivalistRank == 3 then
+            UnitRemoveAbility(hero, FourCC('A0B0')); UnitAddAbility(hero, FourCC('A0AZ'))
+        elseif SurvivalistRank == 4 then
+            UnitRemoveAbility(hero, FourCC('A0AZ')); UnitAddAbility(hero, FourCC('A0B1'))
+        elseif SurvivalistRank == 5 then
+            UnitRemoveAbility(hero, FourCC('A0B1')); UnitAddAbility(hero, FourCC('A0IM'))
+        end
+    end)
+
+    -- Preparation (A0A7 effect): a fellow Runner is healed 50%; any other ally has cooldowns refreshed.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0A7')
+    end, function()
+        local target = GetSpellTargetUnit()
+        if GetUnitTypeId(target) == RUNNER then
+            SetUnitLifePercentBJ(target, GetUnitLifePercent(target) + 50.0)
+        else
+            UnitResetCooldown(target)
+            FloatText(target, "Refreshed!", 0, 100, 100, 3.0)
+        end
+    end)
+
+    -- Birth of Thorns (A0A8 effect): summon a thornbush just ahead that fans-of-knives every 3s, ~30s.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0A8')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local rad = GetUnitFacing(caster) * DEG2RAD
+        local bush = CreateUnit(GetOwningPlayer(caster), THORNBUSH,
+            GetUnitX(caster) + 50.0 * math.cos(rad), GetUnitY(caster) + 50.0 * math.sin(rad), bj_UNIT_FACING)
+        Thornbush = bush
+        for _ = 1, 10 do
+            TriggerSleepAction(3.0)
+            IssueImmediateOrder(bush, "fanofknives")
+        end
+        RemoveUnit(bush)
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -2235,4 +2915,8 @@ function RegisterAbilityTriggers()
     setupDiscipleOfGrace()
     setupDwarvenAxemaster()
     setupBorderSkirmisher()
+    setupCentaurDruid()
+    setupCrestedDrake()
+    setupDwarvenTrueborn()
+    setupWildernessRunner()
 end
