@@ -5,7 +5,7 @@
 -- killing a dungeon's boss removes invulnerability from its treasure chest.
 -- Data extracted via dirty/extract_discover.py. Deviations: portals move only player-slot
 -- (0-7) units (the original's filters varied between "not neutral"/"not P12" per portal);
--- the Underwater_sounds ambience loop (UnderwaterGroup) is not ported (cosmetic, ⬜).
+-- the Underwater_sounds ambience (UnderwaterGroup) plays on each Coral dive (see below).
 
 local NCOP = FourCC('ncop')
 
@@ -38,13 +38,15 @@ local PORTALS = {
     -- Coral Cave + dive network (war3map.j 14010-14256)
     { from = 'CoralCaveEntrance', to = 'CoralCaveEntranceDest' },
     { from = 'CoralCaveExit',     to = 'CoralCaveExitDest' },
-    { from = 'CoralCaveDiveEnt1', to = 'CoralCaveDive1Dest' },
-    { from = 'CoralDive1ExitLeft',  to = 'CoralDive1ExitLeftDest' },
-    { from = 'CoralDive1ExitRight', to = 'CoralDive1ExitRightDest' },
-    { from = 'CoralReturnDive1',    to = 'CoralReturnDive1Dest' },
+    -- `dive` = submerges the unit (joins UnderwaterGroup + plays the ambience); `surface`
+    -- = resurfaces (leaves the group). war3map.j Dive_1_* / Dive_2_Enter 14017-14185.
+    { from = 'CoralCaveDiveEnt1', to = 'CoralCaveDive1Dest',      dive = true },
+    { from = 'CoralDive1ExitLeft',  to = 'CoralDive1ExitLeftDest',  surface = true },
+    { from = 'CoralDive1ExitRight', to = 'CoralDive1ExitRightDest', dive = true },
+    { from = 'CoralReturnDive1',    to = 'CoralReturnDive1Dest',    dive = true },
     { from = 'CoralSecretDive',       to = 'CoralSecretDiveDest' },
     { from = 'CoralSecretDiveReturn', to = 'CoralSecretDiveReturnDest' },
-    { from = 'CoralDive2Ent',    to = 'CoralDive2Dest' },
+    { from = 'CoralDive2Ent',    to = 'CoralDive2Dest',  dive = true },
     { from = 'CoralDive2Return', to = 'DestructibleTrapA' },
     { from = 'BossDiveEntrance', to = 'BossDiveEntranceDest' },
     { from = 'BossDiveReturn',   to = 'CoralCaveExitDest' },
@@ -102,14 +104,37 @@ function RegisterDiscoverTriggers()
         end)
     end
 
-    -- portals: teleport + pan the owner's camera
+    -- Underwater ambience (war3map.j Underwater_sounds 13987-13996): a one-shot sequence of
+    -- four water loops played on a random submerged unit, kicked each time a hero dives. The
+    -- group tracks who is currently underwater; PlaySoundOnUnit on a nil pick is a harmless
+    -- no-op when the group is empty. Built as one reusable trigger executed per dive.
+    local underwaterGroup = CreateGroup()
+    local ambience = CreateTrigger()
+    TriggerAddAction(ambience, function()
+        local plays = {
+            snd.WaterLakeLoop1, snd.WaterStreamLoop1,
+            snd.WaterWaterFallLoop1, snd.WaterWavesLoop1,
+        }
+        for _, s in ipairs(plays) do
+            PlaySoundOnUnitBJ(s, 100, GroupPickRandomUnit(underwaterGroup))
+            TriggerSleepAction(GetRandomReal(1.5, 3.0))
+        end
+    end)
+
+    -- portals: teleport + pan the owner's camera (+ dive/surface ambience bookkeeping)
     for _, p in ipairs(PORTALS) do
         OnEnterRect(rct[p.from], isPlayerUnit, function()
             local u = GetEnteringUnit()
+            if p.dive then
+                GroupAddUnit(underwaterGroup, u)
+            elseif p.surface then
+                GroupRemoveUnit(underwaterGroup, u)
+            end
             local dest = rct[p.to]
             local x, y = GetRectCenterX(dest), GetRectCenterY(dest)
             SetUnitPosition(u, x, y)
             PanCameraToTimedForPlayer(GetOwningPlayer(u), x, y, 0)
+            if p.dive then ConditionalTriggerExecute(ambience) end
         end)
     end
 
