@@ -281,6 +281,11 @@ function BonusesAndUpkeep(levelIndex)
     -- ── Paladin of Justice Crusade (war3map.j 6858) ───────────────────────────
     -- Grants the Paladin escalating stats each cleared level (combat/Abilities.md).
     if trg_Crusade then ConditionalTriggerExecute(trg_Crusade) end
+
+    -- ── Cursed item drop roll (war3map.j 7405: Upkeep_2 → Cursed_Item_Drop_1_to_10) ──
+    -- Per-level d10 roll; the first success arms the one-shot cursed drop. Self-guards
+    -- once CursedItemOn is false, so it's safe to call every level (items.lua).
+    CursedItemRoll()
 end
 
 -- ─── Per-level setup hooks (boss stats/skills + enemy AI) ──────────────────────
@@ -1680,6 +1685,16 @@ LevelData[13].onCleared = function()
         TimerDialogDisplay(level13FailDialog, false)
         level13FailDialog = nil
     end
+end
+-- Loot-tier upgrades fired on victory (war3map.j Level_10_Victory 20538-20543 / Level_20
+-- _Victory 22492): kill-drops + treasure chest jump to the Lv2 pools and scroll drops walk
+-- up the Circle tiers (0->1 at L10, 1->2 at L20). items.lua / scrolls.lua own the state.
+LevelData[10].onCleared = function()
+    UpgradeLootTier()
+    UpgradeScrollTier()
+end
+LevelData[20].onCleared = function()
+    UpgradeScrollTier()
 end
 LevelData[14].setup = setupLevel14
 LevelData[16].setup = setupLevel16AI

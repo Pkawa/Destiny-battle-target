@@ -2891,6 +2891,602 @@ local function setupWildernessRunner()
     end)
 end
 
+-- ══ Half-Elven Bard (H02L) — war3map.j 43157-43969 ════════════════════════════════
+-- Melody the bard. She maintains up to TotalSongs concurrent "songs" (toggle auras). Vocals
+-- (A0AK) raises the concurrent-song cap; Bardic Repertoire (A0AJ) raises the rank tier each song
+-- is granted at. Casting a song's toggle adds that song's rank-ability (refused if the cap is hit
+-- or it's already on); Stop Singing (A0FX) clears them all. Harmony (A07I) briefly allies the enemy
+-- to her (and, at rank 2, to the neutral side too). She also has Crescendo — see note: that's the
+-- Monk's (E000), ported separately below.
+
+-- Per-song rank → ability-id tables (war3map.j Song_Table_Init 43838). Static data; built once here
+-- rather than via the original's 15s timer.
+local HEALING_SONG       = { FourCC('A0F5'), FourCC('A0F6'), FourCC('A0F7'), FourCC('A0F8') }
+local ODE_TO_WAR         = { FourCC('A0FH'), FourCC('A0FI'), FourCC('A0FJ'), FourCC('A0FK') }
+local MOVEMENT_MARCH     = { FourCC('A0F9'), FourCC('A0FA'), FourCC('A0FB'), FourCC('A0FC') }
+local SYMPHONY_OF_FLAME  = { FourCC('A0FD'), FourCC('A0FE'), FourCC('A0FF'), FourCC('A0FG') }
+local HYMN_OF_FROST      = { FourCC('A0FL'), FourCC('A0FN'), FourCC('A0FO') }
+local SONG_OF_MANA       = { FourCC('A0FP'), FourCC('A0FQ'), FourCC('A0FR') }
+local SYMPHONY_OF_STORM  = { FourCC('A0FS'), FourCC('A0FT') }
+local TANGO_OF_TENACITY  = { FourCC('S001'), FourCC('S002') }
+-- Every song ability Stop Singing strips (war3map.j 43219-43248).
+local ALL_SONG_ABILITIES = {
+    'A0F5','A0F6','A0F7','A0F8','A0F9','A0FA','A0FB','A0FC','A0FD','A0FE','A0FF','A0FG',
+    'A0FH','A0FI','A0FJ','A0FK','A0FL','A0FN','A0FO','A0FP','A0FQ','A0FR','S001','S002',
+    'A0FS','A0FT','A0FW','A0FV','A0FU','A0FM',
+}
+
+local function setupHalfElvenBard()
+    -- Which On-flag each song owns (Lua table keeps the per-song boolean; Stop Singing clears all).
+    local songOn = {}
+
+    -- Register one song toggle. `toggles` = the rank-variant ability IDs that fire this song; `rankTbl`
+    -- + `rankOff` pick the granted rank ability (nil for fixed songs); `extraId` is an always-added
+    -- companion ability (e.g. Hymn's A0FM). Refused when the cap is reached or it's already singing.
+    local function song(name, toggles, rankTbl, rankOff, extraId)
+        local ids = {}
+        for _, c in ipairs(toggles) do ids[#ids + 1] = FourCC(c) end
+        OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+            local sid = GetSpellAbilityId()
+            for _, id in ipairs(ids) do if sid == id then return true end end
+            return false
+        end, function()
+            local caster = GetSpellAbilityUnit()
+            if SongsBeingSung >= TotalSongs or songOn[name] then
+                DisplayTextToPlayer(GetOwningPlayer(caster), 0, 0,
+                    "|cffaa88ffYou cannot start that song right now.|r")
+                return
+            end
+            if rankTbl then
+                local id = rankTbl[BardicRepertoirRank + rankOff]
+                if id then UnitAddAbility(caster, id) end
+            end
+            if extraId then UnitAddAbility(caster, FourCC(extraId)) end
+            songOn[name] = true
+            SongsBeingSung = SongsBeingSung + 1
+        end)
+    end
+
+    song("Healing",   { 'A0E8', 'A0EE', 'A0EG', 'A0EF' }, HEALING_SONG,      0)
+    song("OdeToWar",  { 'A0EP', 'A0EQ', 'A0ER', 'A0ES' }, ODE_TO_WAR,        0)
+    song("Searing",   { 'A0EL', 'A0EN', 'A0EM', 'A0EO' }, SYMPHONY_OF_FLAME, 0)
+    song("March",     { 'A0EH', 'A0EI', 'A0EJ', 'A0EK' }, MOVEMENT_MARCH,    0)
+    song("Frost",     { 'A0ET', 'A0EU', 'A0EV' },         HYMN_OF_FROST,    -1, 'A0FM')
+    song("Mana",      { 'A0EX', 'A0EW', 'A0EY' },         SONG_OF_MANA,     -1)
+    song("Tango",     { 'A0EZ', 'A0F0' },                 TANGO_OF_TENACITY,-2)
+    song("Storms",    { 'A0F1', 'A0F2' },                 SYMPHONY_OF_STORM,-2, 'A0FU')
+    song("Whispers",  { 'A0F3' },                         nil,               0, 'A0FV')
+    song("Skulloch",  { 'A0F4' },                         nil,               0, 'A0FW')
+
+    -- Stop Singing (A0FX): clear every song flag + strip all song abilities.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
+        return GetSpellAbilityId() == FourCC('A0FX')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        SongsBeingSung = 0
+        for k in pairs(songOn) do songOn[k] = nil end
+        -- mirror the named globals the rest of the systems may read
+        HealingSongOn = false; OdeToWarOn = false; MovementMarchOn = false
+        SymphonyOfSearingOn = false; SongOfManaOn = false; HymnofFrostOn = false
+        SymphonyOfStormsOn = false; TangoTenacityOn = false; SkullochSongOn = false; WhispersWindOn = false
+        for _, c in ipairs(ALL_SONG_ABILITIES) do UnitRemoveAbility(caster, FourCC(c)) end
+    end)
+
+    -- Vocals Learn (A0AK): +1 to the concurrent-song cap.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0AK')
+    end, function()
+        TotalSongs = TotalSongs + 1
+    end)
+
+    -- Bardic Repertoire Learn (A0AJ): +1 rank tier for every song's granted ability.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0AJ')
+    end, function()
+        BardicRepertoirRank = BardicRepertoirRank + 1
+    end)
+
+    -- Harmony Learn (A07I): +1 rank, remember the Bard's player.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A07I')
+    end, function()
+        HarmonyRank = HarmonyRank + 1
+        BardPlayer = GetOwningPlayer(GetLearningUnit())
+    end)
+
+    -- Harmony Cast (A07I): briefly make the enemy (P9) see the Bard's side as allied — at rank 2 the
+    -- neutral side (P8) too — for 20s, charming the foe into a temporary truce.
+    OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A07I')
+    end, function()
+        if HarmonyRank < 1 then return end
+        DisplayTextToForce(GetPlayersAll(), GetPlayerName(BardPlayer) .. " casts Harmony!")
+        if snd.HolyWinds then PlaySoundBJ(snd.HolyWinds) end
+        SetPlayerAllianceStateBJ(P9, BardPlayer, bj_ALLIANCE_ALLIED_VISION)
+        local rank2 = HarmonyRank == 2
+        if rank2 then SetPlayerAllianceStateBJ(P9, P8, bj_ALLIANCE_ALLIED_VISION) end
+        TriggerSleepAction(20.0)
+        SetPlayerAllianceStateBJ(P9, BardPlayer, bj_ALLIANCE_UNALLIED)
+        if rank2 then SetPlayerAllianceStateBJ(P9, P8, bj_ALLIANCE_UNALLIED) end
+    end)
+
+    -- SongReport (player types "-songs"): print the current / allowed song counts.
+    local report = CreateTrigger()
+    TriggerRegisterPlayerChatEvent(report, Player(0), "-songs", true)
+    TriggerAddAction(report, function()
+        DisplayTextToForce(GetPlayersAll(),
+            "Songs being sung: " .. tostring(SongsBeingSung) ..
+            " and Total Songs Allowed (Vocals): " .. tostring(TotalSongs))
+    end)
+end
+
+-- ══ Monk — "Venille Quickstrike" (E000) — war3map.j 45110-45179 ════════════════════
+-- Crescendo of Blows (A00G): a passive that counts the Monk's attacks; every CrescendoMaxAttacks-th
+-- swing detonates a burst dealing AGI×2 to every Player(9) enemy within 250 of the struck target.
+-- Each Bardic-Repertoire-style rank (A00G learn) lowers the threshold by 4, so it fires more often.
+-- (Crescendo was listed under the Bard in an earlier draft, but its attacker is E000 — the Monk.)
+
+local function setupMonk()
+    local CRESCENDO_FX = "Objects\\Spawnmodels\\NightElf\\NECancelDeath\\NECancelDeath.mdl"
+
+    -- Crescendo of Blows: armed once learned; counts E000's attacks and bursts on the Nth.
+    local blowsT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetUnitTypeId(GetAttacker()) == FourCC('E000')
+    end, function()
+        CrescendoCurrentAttacks = CrescendoCurrentAttacks + 1
+        if CrescendoCurrentAttacks < CrescendoMaxAttacks then return end
+        CrescendoCurrentAttacks = 0
+        local atk = GetAttacker()
+        local victim = GetTriggerUnit()
+        local fx = AddSpecialEffectTarget(CRESCENDO_FX, victim, "origin")
+        ForUnitsInRange(GetUnitX(victim), GetUnitY(victim), 250.0, function()
+            return GetOwningPlayer(GetFilterUnit()) == P9
+        end, function()
+            UnitDamageTarget(atk, GetEnumUnit(), GetHeroAgi(atk, true) * 2.0, false, false,
+                ATTACK_TYPE_HERO, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        end)
+        TriggerSleepAction(2.0)
+        DestroyEffect(fx)
+    end)
+    DisableTrigger(blowsT)
+
+    -- Crescendo Level Up (A00G learn): lower the threshold by 4 and arm the burst.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A00G')
+    end, function()
+        CrescendoMaxAttacks = CrescendoMaxAttacks - 4
+        EnableTrigger(blowsT)
+    end)
+end
+
+-- ══ Reckless Pyromancer (E00E) — war3map.j 47453-48605 ════════════════════════════
+-- The largest hero kit. Everything keys off "the Pyromancer" (the JASS picks a random living E00E —
+-- a single-caster assumption we keep). Four abilities:
+--   Reckless Explosion (A0E0): scatter 8(+4) shrapnel units at the target; each charges a random
+--     distance and explodes. Pyrotech 2 (A0E3) and a per-rank tech (R00G) scale it.
+--   Fire Flower (A0E1): plant attacking flower-seeds (o00D) that burst into homing fire-blooms
+--     (o00E); blooms deal 15×rank fire damage on death. A 5s mana-drain upkeep runs while active;
+--     Detonate (A0E7) pops a seed early.
+--   Absorb Heat (A0E2): gain mana + take self-damage, spawn heat-orbs (o00I) on nearby enemies, and
+--     run a "quickfire" rhythm (e01C marching through the Quickfire zone harvests the orbs for mana
+--     or a backfire if it would overflow).
+--   Meteor Storm (A0E4): a channel that rains meteors (o00J) + impact zones (e01D) around her,
+--     draining MeteorStormManaDrain mana/s until she stops or runs dry.
+
+local PYRO         = FourCC('E00E')
+local BLOOM        = FourCC('o00E')   -- homing fire-bloom projectile
+local FLOWER_SEED  = FourCC('o00D')   -- the attacking fire-flower
+local ABSORB_ORB   = FourCC('o00I')   -- absorbed-heat orb
+local QUICKFIRE_FX = FourCC('e01C')   -- marching quickfire fire-unit
+local METEOR       = FourCC('o00J')   -- falling meteor
+local METEOR_ZONE  = FourCC('e01D')   -- meteor impact-zone unit
+local AIFB_FX      = "Abilities\\Spells\\Items\\AIfb\\AIfbSpecialArt.mdl"
+local FRAGBOOM_FX  = "Objects\\Spawnmodels\\Human\\FragmentationShards\\FragBoomSpawn.mdl"
+local NEUTRAL_BOOM_FX = "Objects\\Spawnmodels\\Other\\NeutralBuildingExplosion\\NeutralBuildingExplosion.mdl"
+local REPLENISH_FX = "Abilities\\Spells\\Undead\\ReplenishMana\\ReplenishManaCaster.mdl"
+local DISPEL_FX    = "Abilities\\Spells\\Human\\DispelMagic\\DispelMagicTarget.mdl"
+local SHRAPNEL_TYPE = { FourCC('o00G'), FourCC('o00C'), FourCC('o00H'), FourCC('o00F') }
+-- shrapnel scatter range by unit-type (war3map.j 47621-47633)
+local SHRAPNEL_RANGE = {
+    [FourCC('o00G')] = { 500, 700 }, [FourCC('o00C')] = { 350, 500 },
+    [FourCC('o00H')] = { 200, 350 }, [FourCC('o00F')] = { 60, 200 },
+}
+local FIRE_FIXED_ANGLES   = { 25, 65, 115, 165, 205, 245, 295, 335 }
+local ABSORB_HEAT_MANA     = { 25, 50, 80, 110, 150 }
+local ABSORB_HEAT_MANA_ORB = { 10, 20, 35, 50, 75 }
+local ABSORB_HEAT_DMG_SELF = { 30, 50, 75, 90, 125 }
+local ABSORB_HEAT_DMG_ORB  = { 7, 10, 12, 15, 20 }
+local ABSORB_HEAT_BACKFIRE = { 45, 65, 85, 100, 120 }
+local ABSORB_HEAT_RANGE    = { 500, 600, 750, 900, 900 }
+
+local function setupRecklessPyromancer()
+    -- The active Pyromancer (single-caster model: the JASS picks a random living E00E).
+    local function pyro()
+        local g = GetUnitsOfTypeIdAll(PYRO)
+        local u = FirstOfGroup(g)
+        DestroyGroup(g)
+        return u
+    end
+    local function countOfType(id)
+        local g = GetUnitsOfTypeIdAll(id)
+        local n = CountUnitsInGroup(g)
+        DestroyGroup(g)
+        return n
+    end
+    local function forEachOfType(id, fn)
+        local g = GetUnitsOfTypeIdAll(id)
+        ForGroup(g, fn)
+        DestroyGroup(g)
+    end
+    local function lvl(u, id) return u and GetUnitAbilityLevel(u, FourCC(id)) or 0 end
+    local function addMana(u, amt)
+        SetUnitState(u, UNIT_STATE_MANA, GetUnitState(u, UNIT_STATE_MANA) + amt)
+    end
+    local function selfHurt(u, amt, atkType)
+        UnitDamageTarget(u, u, amt, false, false, atkType, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+    end
+
+    -- ── Fire-bloom burst (shared by Fire Flower Lv1 + Detonate) ────────────────
+    local function blastFixed(owner, x, y)
+        for _, a in ipairs(FIRE_FIXED_ANGLES) do CreateUnit(owner, BLOOM, x, y, a) end
+    end
+    local function blastRandom(owner, x, y, n)
+        for _ = 1, n do CreateUnit(owner, BLOOM, x, y, GetRandomDirectionDeg()) end
+    end
+    -- One full bloom burst: base 16 blooms, +8 at Pyrotech-2 rank 1, +24 after a 1s pause at rank 2.
+    local function fireBurst(owner, x, y, pauseTarget, a0e3)
+        DestroyEffect(AddSpecialEffect(AIFB_FX, x, y))
+        blastFixed(owner, x, y); blastRandom(owner, x, y, 8)
+        if a0e3 >= 1 then blastRandom(owner, x, y, 8) end
+        if a0e3 >= 2 then
+            if pauseTarget then PauseUnit(pauseTarget, true) end
+            TriggerSleepAction(1.0)
+            DestroyEffect(AddSpecialEffect(AIFB_FX, x, y))
+            blastFixed(owner, x, y); blastRandom(owner, x, y, 16)
+        end
+    end
+
+    -- ════ Reckless Explosion (A0E0) ════════════════════════════════════════════
+    -- Shrapnel Initial: a scattered shrapnel unit charges a random distance, then detonates.
+    local explInitialT = OnEnterRect(GetPlayableMapRect(), function()
+        local r = SHRAPNEL_RANGE[GetUnitTypeId(GetEnteringUnit())]
+        return r ~= nil
+    end, function()
+        local u = GetEnteringUnit()
+        local r = SHRAPNEL_RANGE[GetUnitTypeId(u)]
+        local ang = GetRandomDirectionDeg() * DEG2RAD
+        local dist = GetRandomInt(r[1], r[2])
+        IssuePointOrder(u, "attackground", GetUnitX(u) + dist * math.cos(ang), GetUnitY(u) + dist * math.sin(ang))
+        TriggerSleepAction(1.0)
+        SetUnitExploded(u, true); KillUnit(u)
+        TriggerSleepAction(2.0)
+        RemoveUnit(u)
+    end)
+    DisableTrigger(explInitialT)
+
+    -- Shrapnel cast (A0E0 cast): 1s later, blast the target point with 8 (+4 at Pyrotech 2) shrapnel.
+    local explShrapnelT = OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0E0')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local owner = GetOwningPlayer(caster)
+        local tx, ty = GetSpellTargetX(), GetSpellTargetY()
+        local extra = lvl(caster, 'A0E3') >= 1
+        TriggerSleepAction(1.0)
+        DestroyEffect(AddSpecialEffect(FRAGBOOM_FX, tx, ty))
+        DestroyEffect(AddSpecialEffect(NEUTRAL_BOOM_FX, tx, ty))
+        local n = extra and 12 or 8
+        for _ = 1, n do
+            CreateUnit(owner, SHRAPNEL_TYPE[GetRandomInt(1, 4)], tx, ty, GetRandomReal(10.0, 80.0))
+        end
+    end)
+    DisableTrigger(explShrapnelT)
+
+    -- Reckless Explosion Learn (A0E0): arm the shrapnel + research the AoE tech per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0E0')
+    end, function()
+        local hero = GetTriggerUnit()
+        EnableTrigger(explInitialT); EnableTrigger(explShrapnelT)
+        local n = GetUnitAbilityLevel(hero, FourCC('A0E0'))
+        if n >= 2 then SetPlayerTechResearched(GetOwningPlayer(hero), FourCC('R00G'), n - 1) end
+        if n >= 4 then DisableTrigger(GetTriggeringTrigger()) end
+    end)
+
+    -- ════ Fire Flower (A0E1) ════════════════════════════════════════════════════
+    -- Fire Flower Lv1: a flower-seed (o00D) attacks → pause it, burst blooms, then kill+remove it.
+    local flowerLv1T = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
+        return GetUnitTypeId(GetAttacker()) == FLOWER_SEED
+    end, function()
+        local seed = GetAttacker()
+        local owner = GetOwningPlayer(seed)
+        local x, y = GetUnitX(seed), GetUnitY(seed)
+        PauseUnit(seed, true)
+        fireBurst(owner, x, y, seed, lvl(pyro(), 'A0E3'))
+        TriggerSleepAction(2.0)
+        KillUnit(seed)
+        TriggerSleepAction(1.0)
+        RemoveUnit(seed)
+    end)
+    DisableTrigger(flowerLv1T)
+
+    -- Fire Bloom: each bloom rushes 1000 forward, then dies/cleans up after a short random life.
+    local fireBloomT = OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == BLOOM
+    end, function()
+        local b = GetEnteringUnit()
+        SetUnitMoveSpeed(b, GetRandomReal(150.0, 350.0))
+        local ang = GetUnitFacing(b) * DEG2RAD
+        IssuePointOrder(b, "move", GetUnitX(b) + 1000.0 * math.cos(ang), GetUnitY(b) + 1000.0 * math.sin(ang))
+        TriggerSleepAction(GetRandomReal(2.0, 4.0))
+        KillUnit(b)
+        TriggerSleepAction(1.0)
+        RemoveUnit(b)
+    end)
+    DisableTrigger(fireBloomT)
+
+    -- Fire Flower mana-drain upkeep: while seeds live, drain mana/5s; at ≤5 mana the seeds self-immolate.
+    local manaDrainActive = false
+    local function startManaDrain()
+        if manaDrainActive then return end
+        manaDrainActive = true
+        Every(5.0, function()
+            local p = pyro()
+            local seeds = countOfType(FLOWER_SEED)
+            if seeds == 0 then manaDrainActive = false; return true end       -- stop
+            if p and seeds > lvl(p, 'A0E1') then
+                DestroyEffect(AddSpecialEffectTarget(REPLENISH_FX, p, "origin"))
+                local drain = FireFlowerManaDrain[lvl(p, 'A0E1')] or 0
+                SetUnitState(p, UNIT_STATE_MANA, GetUnitState(p, UNIT_STATE_MANA) - drain * seeds)
+            end
+            if p and GetUnitState(p, UNIT_STATE_MANA) <= 5.0 then
+                forEachOfType(FLOWER_SEED, function()
+                    local s = GetEnumUnit()
+                    IssueTargetOrder(s, "attack", s)
+                end)
+            end
+        end)
+    end
+
+    -- Fire Flower Cast (A0E1 cast): start the upkeep loop.
+    local flowerCastT = OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0E1')
+    end, startManaDrain)
+    DisableTrigger(flowerCastT)
+
+    -- Fire Flower Die (o00E death): the bloom detonates for 15×rank fire damage in a 100 radius.
+    local flowerDieT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetTriggerUnit()) == BLOOM
+    end, function()
+        local b = GetTriggerUnit()
+        UnitDamagePoint(b, 0, 100.0, GetUnitX(b), GetUnitY(b), 15.0 * lvl(pyro(), 'A0E1'), false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_FIRE, WEAPON_TYPE_WHOKNOWS)
+    end)
+    DisableTrigger(flowerDieT)
+
+    -- Fire Flower Detonate (A0E7 cast): pop the targeted seed early into a bloom burst.
+    local flowerDetonateT = OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0E7')
+    end, function()
+        local seed = GetTriggerUnit()
+        local owner = GetOwningPlayer(seed)
+        local x, y = GetUnitX(seed), GetUnitY(seed)
+        KillUnit(seed)
+        fireBurst(owner, x, y, nil, lvl(pyro(), 'A0E3'))
+        TriggerSleepAction(3.0)
+        RemoveUnit(seed)
+    end)
+    DisableTrigger(flowerDetonateT)
+
+    -- Fire Flower Learn (A0E1): arm the flower triggers + research R00Q per rank.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0E1')
+    end, function()
+        local hero = GetTriggerUnit()
+        EnableTrigger(flowerLv1T); EnableTrigger(fireBloomT); EnableTrigger(flowerCastT)
+        EnableTrigger(flowerDieT); EnableTrigger(flowerDetonateT)
+        local n = GetUnitAbilityLevel(hero, FourCC('A0E1'))
+        SetPlayerTechResearched(GetOwningPlayer(hero), FourCC('R00Q'), n)
+        if n >= 4 then DisableTrigger(GetTriggeringTrigger()) end
+    end)
+
+    -- ════ Absorb Heat (A0E2) ════════════════════════════════════════════════════
+    -- Quickfire harvest: an e01C entering the Quickfire zone consumes every heat-orb near the Pyro,
+    -- granting mana (or backfiring if it would overflow her mana pool).
+    local quickfireT = OnEnterRect(rct.Quickfire, function()
+        return GetUnitTypeId(GetEnteringUnit()) == QUICKFIRE_FX
+    end, function()
+        local fx = GetEnteringUnit()
+        local p = pyro()
+        if p then
+            local a0e2, a0e3 = lvl(p, 'A0E2'), lvl(p, 'A0E3')
+            local px, py = GetUnitX(p), GetUnitY(p)
+            ForUnitsInRange(px, py, 150.0, function()
+                return GetUnitTypeId(GetFilterUnit()) == ABSORB_ORB
+            end, function()
+                local orb = GetEnumUnit()
+                local gain = (ABSORB_HEAT_MANA[a0e2] or 0) * (1 + 0.15 * a0e3)
+                if GetUnitState(p, UNIT_STATE_MANA) + gain > GetUnitState(p, UNIT_STATE_MAX_MANA) then
+                    -- overflow → backfire
+                    local back = (ABSORB_HEAT_BACKFIRE[a0e2] or 0) * (a0e3 >= 2 and 0.7 or 1.0)
+                    selfHurt(p, back, ATTACK_TYPE_HERO)
+                    DestroyEffect(AddSpecialEffectTarget(FRAGBOOM_FX, p, "origin"))
+                    if a0e3 == 3 then blastRandom(GetOwningPlayer(fx), px, py, 3) end
+                else
+                    selfHurt(p, ABSORB_HEAT_DMG_ORB[a0e2] or 0, ATTACK_TYPE_HERO)
+                    addMana(p, (ABSORB_HEAT_MANA_ORB[a0e2] or 0) * (1 + 0.15 * a0e3))
+                    DestroyEffect(AddSpecialEffectTarget(DISPEL_FX, p, "origin"))
+                end
+                RemoveUnit(orb)
+            end)
+        end
+        RemoveUnit(fx)
+    end)
+    DisableTrigger(quickfireT)
+
+    -- Absorbed Heat Go: an orb chases the Pyro for ~5s, then bursts (damage = its stored user-data).
+    local absorbGoT = OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == ABSORB_ORB
+    end, function()
+        local orb = GetEnteringUnit()
+        for _ = 1, 5 do
+            local p = pyro()
+            if p then IssuePointOrder(orb, "move", GetUnitX(p), GetUnitY(p)) end
+            TriggerSleepAction(1.0)
+        end
+        UnitDamagePoint(orb, 0, 300.0, GetUnitX(orb), GetUnitY(orb), GetUnitUserData(orb), false, false,
+            ATTACK_TYPE_NORMAL, DAMAGE_TYPE_NORMAL, WEAPON_TYPE_WHOKNOWS)
+        DestroyEffect(AddSpecialEffect(FRAGBOOM_FX, GetUnitX(orb), GetUnitY(orb)))
+        KillUnit(orb)
+    end)
+    DisableTrigger(absorbGoT)
+
+    -- Quick Enter: each spawned quickfire unit (e01C) marches 1000 south (its user-data = its facing).
+    OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == QUICKFIRE_FX
+    end, function()
+        local u = GetEnteringUnit()
+        SetUnitUserData(u, R2I(GetUnitFacing(u)))
+        IssuePointOrder(u, "move", GetUnitX(u), GetUnitY(u) - 1000.0)
+    end)
+
+    -- Absorb Heat Cast (A0E2 cast): gain mana, self-damage, spawn heat-orbs on enemies in range, then
+    -- launch 5 waves of quickfire units (e01C) down the Quickfire lanes.
+    local absorbCastT = OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
+        return GetSpellAbilityId() == FourCC('A0E2')
+    end, function()
+        local caster = GetSpellAbilityUnit()
+        local owner = GetOwningPlayer(caster)
+        local p = pyro()
+        if p then addMana(p, ABSORB_HEAT_MANA[lvl(p, 'A0E2')] or 0) end
+        selfHurt(caster, ABSORB_HEAT_DMG_SELF[lvl(caster, 'A0E2')] or 0, ATTACK_TYPE_NORMAL)
+        local range = ABSORB_HEAT_RANGE[lvl(caster, 'A0E2')] or 500
+        ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), range, function()
+            local f = GetFilterUnit()
+            return GetOwningPlayer(f) ~= owner and not IsUnitType(f, UNIT_TYPE_STRUCTURE)
+                and GetWidgetLife(f) > 0.405 and not UnitHasBuffBJ(f, FourCC('B056'))
+        end, function()
+            CreateUnit(owner, ABSORB_ORB, GetUnitX(GetEnumUnit()), GetUnitY(GetEnumUnit()), bj_UNIT_FACING)
+        end)
+        local lanes = { rct.Quickfire1, rct.Quickfire3, rct.Quickfire5, rct.Quickfire7, rct.Quickfire9 }
+        for wave = 1, 5 do
+            for _, lane in ipairs(lanes) do
+                local loc = GetRectCenter(lane)
+                CreateUnit(owner, QUICKFIRE_FX, GetLocationX(loc), GetLocationY(loc), bj_UNIT_FACING)
+                RemoveLocation(loc)
+            end
+            if wave < 5 then TriggerSleepAction(1.0) end
+        end
+    end)
+    DisableTrigger(absorbCastT)
+
+    -- Absorb Heat Learn (A0E2): arm the cast/quickfire/orb triggers.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0E2')
+    end, function()
+        EnableTrigger(absorbCastT); EnableTrigger(quickfireT); EnableTrigger(absorbGoT)
+        if GetUnitAbilityLevel(GetTriggerUnit(), FourCC('A0E2')) >= 4 then DisableTrigger(GetTriggeringTrigger()) end
+    end)
+
+    -- ════ Pyrotech 2 (A0E3) — passive upgrade ═══════════════════════════════════
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0E3')
+    end, function()
+        local hero = GetTriggerUnit()
+        local n = GetUnitAbilityLevel(hero, FourCC('A0E3'))
+        if n >= 2 then SetPlayerTechResearched(GetOwningPlayer(hero), FourCC('R00R'), n - 1) end
+        if n >= 3 then
+            FireFlowerManaDrain[1] = 3.50; FireFlowerManaDrain[2] = 6.30
+            FireFlowerManaDrain[3] = 9.10; FireFlowerManaDrain[4] = 12.60
+            DisableTrigger(GetTriggeringTrigger())
+        end
+    end)
+
+    -- ════ Meteor Storm (A0E4) — a channel ═══════════════════════════════════════
+    -- Meteor Fire: a falling meteor (o00J) attack-grounds a random spot near the Pyro, then clears.
+    local meteorFireT = OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == METEOR
+    end, function()
+        local m = GetEnteringUnit()
+        local p = pyro()
+        if p then
+            local ang = GetRandomDirectionDeg() * DEG2RAD
+            local d = GetRandomInt(300, 1250)
+            IssuePointOrder(m, "attackground", GetUnitX(p) + d * math.cos(ang), GetUnitY(p) + d * math.sin(ang))
+        end
+        TriggerSleepAction(2.0)
+        RemoveUnit(m)
+    end)
+    DisableTrigger(meteorFireT)
+
+    -- Meteor Impact Zone: the impact-zone unit (e01D) lingers 6s then clears.
+    local meteorZoneT = OnEnterRect(GetPlayableMapRect(), function()
+        return GetUnitTypeId(GetEnteringUnit()) == METEOR_ZONE
+    end, function()
+        local z = GetEnteringUnit()
+        TriggerSleepAction(6.0)
+        RemoveUnit(z)
+    end)
+    DisableTrigger(meteorZoneT)
+
+    -- Meteor Impact Shrapnel: a zone killed by a meteor sprays 2 shrapnel units.
+    local meteorShrapT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetUnitTypeId(GetTriggerUnit()) == METEOR_ZONE
+            and GetUnitTypeId(GetKillingUnit()) == METEOR
+    end, function()
+        local z = GetTriggerUnit()
+        local owner = GetOwningPlayer(GetKillingUnit())
+        for _ = 1, 2 do
+            CreateUnit(owner, SHRAPNEL_TYPE[GetRandomInt(1, 4)], GetUnitX(z), GetUnitY(z), GetRandomDirectionDeg())
+        end
+        RemoveUnit(z)
+    end)
+    DisableTrigger(meteorShrapT)
+
+    -- Meteor Storm channel (A0E4): rain meteors + zones each second while she keeps channeling and
+    -- has mana; drains MeteorStormManaDrain/s. (The JASS self-`ConditionalTriggerExecute` loop → a
+    -- captured-caster while-loop; the order check uses the actual caster, not a re-picked global.)
+    local TRANQUILITY = OrderId("tranquility")
+    local meteorStormT = OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CHANNEL, function()
+        return GetSpellAbilityId() == FourCC('A0E4')
+    end, function()
+        local caster = GetTriggerUnit()
+        while true do
+            local p = pyro() or caster
+            local function rndOut(base, lo, hi)
+                local ang = GetRandomDirectionDeg() * DEG2RAD
+                local d = base + GetRandomReal(lo, hi)
+                return GetUnitX(p) + d * math.cos(ang), GetUnitY(p) + d * math.sin(ang)
+            end
+            local owner = GetOwningPlayer(p)
+            for _ = 1, 3 do
+                local x, y = rndOut(100.0, 100.0, 1000.0)
+                CreateUnit(owner, METEOR, x, y, bj_UNIT_FACING)
+            end
+            for _ = 1, 11 do
+                local x, y = rndOut(200.0, 0.0, 1100.0)
+                CreateUnit(GetOwningPlayer(caster), METEOR_ZONE, x, y, bj_UNIT_FACING)
+            end
+            TriggerSleepAction(1.0)
+            if GetUnitCurrentOrder(caster) ~= TRANQUILITY then break end
+            SetUnitState(caster, UNIT_STATE_MANA, GetUnitState(caster, UNIT_STATE_MANA) - MeteorStormManaDrain)
+            if GetUnitState(caster, UNIT_STATE_MANA) < MeteorStormManaDrain then
+                IssueImmediateOrder(caster, "stop")
+            end
+        end
+    end)
+    DisableTrigger(meteorStormT)
+
+    -- Meteor Storm Learn (A0E4): arm the storm triggers + cheapen the per-second drain.
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A0E4')
+    end, function()
+        EnableTrigger(meteorStormT); EnableTrigger(meteorFireT)
+        EnableTrigger(meteorZoneT); EnableTrigger(meteorShrapT)
+        MeteorStormManaDrain = MeteorStormManaDrain - 10.0
+    end)
+end
+
 function RegisterAbilityTriggers()
     setupEarthenTemplar()
     setupEngineer()
@@ -2919,4 +3515,7 @@ function RegisterAbilityTriggers()
     setupCrestedDrake()
     setupDwarvenTrueborn()
     setupWildernessRunner()
+    setupHalfElvenBard()
+    setupMonk()
+    setupRecklessPyromancer()
 end

@@ -106,6 +106,7 @@ function CreateAllRegions()
 
     -- Hero selection / mode selection UI
     rct.WeatherTarget           = Rect(6080, -3392, 6336, -3168)
+    rct.NecromanticResearch     = Rect(-480, -3456, -288, -3264)  -- Necronomicon lab site
     rct.PickModeStart           = Rect(8928, 9280, 10368, 9536)
     rct.HeroSelect              = Rect(8864, 10240, 10464, 11040)
     rct.PickMode                = Rect(8128, 9216, 10880, 11616)

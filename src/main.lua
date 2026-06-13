@@ -79,6 +79,14 @@ RegisterWorldDropTriggers()
 -- Register the Treasure Chest pinata (accumulate Player-9 kills -> spawn a chest -> loot)
 RegisterTreasureChestDrop()
 
+-- Register the cursed-item drop (per-level roll arms a one-shot kill-counter drop of
+-- I095/I0B8; the roll is fired per level from BonusesAndUpkeep — items/Items.md §3)
+RegisterCursedItemTriggers()
+
+-- Register special/consumable item use-effects (Chronoegg, Energy Drink, Barrel,
+-- Weather Control, Blooddrinker, … — one USE_ITEM dispatch; items/Items.md §4)
+RegisterConsumableTriggers()
+
 -- Register set-item combining (hold all pieces -> combined item)
 RegisterSetTriggers()
 
@@ -105,6 +113,12 @@ RegisterResearchTriggers()
 
 -- Register circle-scroll spell learning (use scroll -> learn spell, one at a time)
 RegisterScrollTriggers()
+
+-- Register circle-scroll loot-boxes (buy a box token -> random scroll from a fixed Circle)
+RegisterScrollBoxTriggers()
+
+-- Register the circle-scroll DROP system (kill-counter drops a random scroll; tiers up at L10/L20)
+RegisterScrollDropTriggers()
 
 -- Register discover areas / dungeons (7 zones, portals, flavor, boss-chest unlocks)
 RegisterDiscoverTriggers()

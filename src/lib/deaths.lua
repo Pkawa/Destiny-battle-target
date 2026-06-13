@@ -164,7 +164,71 @@ function RegisterHeroDeathTriggers()
             DisplayTextToForce(GetPlayersAll(),
                 "|cffff0000In the end, Adomach's hold of the world grew strong. Tragedy and despair was all the world would know, evermore..|r")
             TriggerSleepAction(4.0)
-            -- The credits roll (gg_trg_Credits) is a separate ⬜ system; the cinematic ends here.
+            -- Roll the closing credits / score synopsis (war3map.j Credits 18337-18390).
+            RollDefeatCredits()
         end)
     end
+end
+
+-- The defeat credits roll (war3map.j Credits 18337-18390; gg_trg_Credits, fired at the end of
+-- the Defeat cinematic, 29886). Invuln+pause the world, show kill scores, revive every hero at
+-- the spawn, then the score synopsis (roster, level reached, difficulty, version, placement)
+-- and finally CustomDefeat for each player. The original lists all 8 player slots verbatim; we
+-- iterate the playing-user slots (skips empty slots / nil heroes — cleaner, same intent).
+function RollDefeatCredits()
+    -- Invulnerable-lock everything still on the field (war3map.j 18333-18338).
+    local g = GetUnitsInRectAll(GetPlayableMapRect())
+    ForGroup(g, function() SetUnitInvulnerable(GetEnumUnit(), true) end)
+    DestroyGroup(g)
+    StopAllMusic()
+    BossMusic = false; MusicOn = false
+
+    local function eachPlayer(fn)
+        for i = 0, 7 do
+            local p = Player(i)
+            if GetPlayerController(p) == MAP_CONTROL_USER
+                and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING then
+                fn(i, p)
+            end
+        end
+    end
+
+    DisplayTimedTextToForce(GetPlayersAll(), 9.0,
+        "|cffff0000Though Vern fell.. the heroes who had dedicated themselves to its defense quietly passed on to legend..|r")
+    TriggerSleepAction(9.0)
+    DisplayTextToForce(GetPlayersAll(), "|cffff0000Calculating Scores . . .|r")
+    TriggerSleepAction(3.0)
+    eachPlayer(function(i, p)
+        DisplayTextToForce(GetPlayersAll(), GetPlayerName(p) .. " : " .. (Kills[i + 1] or 0))
+    end)
+
+    -- Revive heroes at the starting area, then freeze the field (war3map.j 18355-18365).
+    local sx, sy = GetRectCenterX(rct.StartingPlayerArea), GetRectCenterY(rct.StartingPlayerArea)
+    eachPlayer(function(i)
+        local h = Heroes[i + 1]
+        if h then ReviveHero(h, sx, sy, true) end
+    end)
+    TriggerSleepAction(2.0)
+    PauseAllUnitsBJ(true)
+    TriggerSleepAction(9.0)
+
+    -- Score synopsis (war3map.j 18366-18379).
+    DisplayTimedTextToForce(GetPlayersAll(), 30.0, "|cffff0000Score Synopsis|r")
+    eachPlayer(function(i, p)
+        local h = Heroes[i + 1]
+        DisplayTimedTextToForce(GetPlayersAll(), 800.0,
+            GetPlayerName(p) .. ": - " .. (h and GetUnitName(h) or ""))
+    end)
+    DisplayTimedTextToForce(GetPlayersAll(), 800.0, "Met Defeat on Level: " .. CurrentLevel)
+    DisplayTimedTextToForce(GetPlayersAll(), 800.0, "|cffff0000Difficulty Level:|r " .. Difficulty)
+    DisplayTimedTextToForce(GetPlayersAll(), 800.0, "|cffff0000Version:|r " .. CurrentVersion)
+    DisplayTimedTextToForce(GetPlayersAll(), 800.0,
+        "Your team placed " .. (TotalTeamsLeft + 1) .. " of " .. TotalTeams)
+    DisplayTimedTextToForce(GetPlayersAll(), 800.0,
+        "|cffff0000If you believe you are eligible for the leaderboards (Top 15 teams for each difficulty), take a screenshot of this screen and submit it to the forums listed below!|r")
+    TriggerSleepAction(800.0)
+    DisplayTextToForce(GetPlayersAll(), "Game will end in 30 seconds.")
+    TriggerSleepAction(30.0)
+
+    eachPlayer(function(_, p) CustomDefeatBJ(p, "Defeat!") end)
 end

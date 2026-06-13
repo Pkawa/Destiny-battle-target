@@ -88,6 +88,92 @@ local function removeScrollSkills(hero)
     end
 end
 
+-- ── Circle scroll DROP system (war3map.j 33677-33918) ──────────────────────────
+-- A separate kill-counter (ScrollDrop / TotalScrollDrop, shared across tiers) that drops a
+-- random scroll item from the active Circle pool on Player(9) deaths. Three tiers, only one
+-- active at a time: Circle 0 from the start, -> Circle 1 at the Level-10 victory (war3map.j
+-- 20540), -> Circle 2 at the Level-20 victory (war3map.j 22492). The original's three
+-- near-identical triggers collapse into one drop trigger that reads the active tier.
+--
+-- Faithful draw bounds (note Circle 0 draws 0..13 over a table whose index 6 is never set —
+-- ~1/14 of drops land on the empty slot and spill nothing; preserved). Tables built 0-indexed
+-- to match the original GetRandomInt(lo, hi) inclusive draws.
+local CIRCLE_TIERS = {}
+do
+    local function tier(maxDraw, entries)  -- entries: { [index] = 'Ixxx', ... }
+        local t = { maxDraw = maxDraw }
+        for idx, code in pairs(entries) do t[idx] = FourCC(code) end
+        return t
+    end
+    -- Circle 0 (war3map.j 33848): indices 0-18 with a gap at 6; drop draws 0..13.
+    CIRCLE_TIERS[0] = tier(13, {
+        [0]='I064', [1]='I065', [2]='I059', [3]='I05H', [4]='I067', [5]='I068',
+        [7]='I069', [8]='I06A', [9]='I06B', [10]='I01A', [11]='I07X', [12]='I08S',
+        [13]='I08R', [14]='I04M', [15]='I04K', [16]='I03R', [17]='I04J', [18]='I04L',
+    })
+    -- Circle 1 (war3map.j 33879): indices 0-10; drop draws 0..10.
+    CIRCLE_TIERS[1] = tier(10, {
+        [0]='I09U', [1]='I09J', [2]='I09Q', [3]='I09M', [4]='I09K', [5]='I09P',
+        [6]='I09T', [7]='I09L', [8]='I09R', [9]='I09O', [10]='I09N',
+    })
+    -- Circle 2 (war3map.j 33903): indices 0-6; drop draws 0..6.
+    CIRCLE_TIERS[2] = tier(6, {
+        [0]='I09V', [1]='I0A2', [2]='I0A1', [3]='I0A3', [4]='I0A0', [5]='I09X', [6]='I09W',
+    })
+end
+local scrollTier = 0
+
+-- Advance to the next scroll-drop tier (Level-10 victory: 0->1; Level-20 victory: 1->2).
+function UpgradeScrollTier()
+    if scrollTier < 2 then scrollTier = scrollTier + 1 end
+end
+
+function RegisterScrollDropTriggers()
+    local t = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(t, Player(9), EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(t, Condition(function()
+        local id = GetUnitTypeId(GetDyingUnit())
+        return id ~= FourCC('e002') and id ~= FourCC('e003') and id ~= FourCC('e007')
+    end))
+    TriggerAddAction(t, function()
+        if ScrollDrop < TotalScrollDrop then
+            ScrollDrop = ScrollDrop + GetRandomInt(0, 5) + 1
+            return
+        end
+        ScrollDrop = 0
+        local tier = CIRCLE_TIERS[scrollTier]
+        local code = tier[GetRandomInt(0, tier.maxDraw)]   -- may be nil on Circle 0's gap
+        if code then
+            CreateItem(code, GetUnitX(GetDyingUnit()), GetUnitY(GetDyingUnit()))
+        end
+    end)
+end
+
+-- ── Scroll loot-boxes (war3map.j 34942-35011) ──
+-- Three base-shop tokens grant a random scroll from a FIXED Circle pool (not the active
+-- drop tier): I0AM->Circle 0, I0AN->Circle 1, I0AO->Circle 2. The original draws over the
+-- same inclusive bounds as the drop system (Circle 0 has the index-6 gap → ~1/14 spill).
+-- economy/Economy.md §5.
+function RegisterScrollBoxTriggers()
+    local function scrollBox(tokenCode, circle)
+        local token = FourCC(tokenCode)
+        local tier = CIRCLE_TIERS[circle]
+        local t = CreateTrigger()
+        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+        TriggerAddCondition(t, Condition(function()
+            return GetItemTypeId(GetManipulatedItem()) == token
+        end))
+        TriggerAddAction(t, function()
+            RemoveItem(GetManipulatedItem())
+            local code = tier[GetRandomInt(0, tier.maxDraw)]   -- may be nil on Circle 0's gap
+            if code then UnitAddItemByIdSwapped(code, GetManipulatingUnit()) end
+        end)
+    end
+    scrollBox('I0AM', 0)   -- Lv0 scroll box (war3map.j 34944)
+    scrollBox('I0AN', 1)   -- Lv1 scroll box (war3map.j 34968)
+    scrollBox('I0AO', 2)   -- Lv2 scroll box (war3map.j 34992)
+end
+
 function RegisterScrollTriggers()
     OnAnyUnit(EVENT_PLAYER_UNIT_USE_ITEM, function()
         return SCROLLS[GetItemTypeId(GetManipulatedItem())] ~= nil

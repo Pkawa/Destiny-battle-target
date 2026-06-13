@@ -200,6 +200,7 @@ LifeLinkMultiplier      = 3.0
 TranscendTime           = 75.0
 HavenManaRepelCost      = 15.0
 MeteorStormManaDrain    = 35.0
+FireFlowerManaDrain     = { 2.0, 5.0, 10.0, 15.0 }  -- Reckless Pyromancer: per-rune mana drain/5s (raised by Pyrotech 2 rank 3)
 CrescendoMaxAttacks     = 29
 CrescendoCurrentAttacks = 0
 ElvenRebirthCooldown    = 10.0
@@ -265,6 +266,11 @@ for i = 1, 8 do RelationLevel[i] = 1 end
 
 -- Scroll / circle arrays (populated at T+16s)
 Circle0Scrolls = {}; Circle1Scrolls = {}; Circle2Scrolls = {}
+
+-- Consumable / special-item buff state (items/Items.md §4)
+CoralBladeBlessingCurrent = nil   -- hero currently carrying an active Coral Blade Blessing
+CoralBlessingOn           = false -- true for the 20s the blessing's mana-on-attack is live
+RobeBloodInt              = false -- flags the Robe of Blood's on-cast detonation as active
 
 -- Weather
 RandomWeather       = 0
@@ -367,6 +373,7 @@ CentaurDruidBonusA  = false;  CentaurDruidBonusB  = false;   CentaurDruidPlayer 
 ClericElvenWordBonusA= false; ClericElvenWordBonusB= false;   ClericEWPlayer      = nil
 CrestedDrakeBonusA  = false;  CrestedDrakeBonusB  = false;   CrestedDrakePlayer  = nil
 HEBardBonusA        = false;  HEBardBonusB        = false;   BardPlayer          = nil
+HarmonyRank         = 0    -- Half-Elven Bard Harmony rank (1 = ally P9 vision; 2 = also ally P8)
 RogueOTDBonusA      = false;  RogueOTDBonusB      = false;   RogueOTDBonusC      = false
 SharpshooterBonusB  = false;  SharpshooterPlayer  = nil
 MajinPlayer         = nil  -- set when Reckless Pyromancer kills an ally with a spell

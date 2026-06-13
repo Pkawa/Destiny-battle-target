@@ -7,8 +7,9 @@
 -- drops at the corpse — rarity-rolled 60% uncommon / 30% rare / 7% epic / 3% artifact —
 -- and the counter resets. These pools are the shared loot source the rest of the economy
 -- (Purchase loot-boxes, Auction House, Sell) will read once those are ported.
--- Not yet ported: Lv2 pools / Lv_2_Item (higher levels), cursed drops, ItemDropTotal
--- research reductions (Scavenging etc.).
+-- The drop is tier-aware: UpgradeLootTier() (fired from LevelData[10].onCleared) switches
+-- to the Lv2 pools at the Level-10 victory (war3map.j 20538, Lv_2_Item). Circle scroll drops
+-- live in scrolls.lua. Not yet ported: cursed drops, ItemDropTotal research reductions.
 
 -- Build a 0-indexed FourCC pool (matches the original's GetRandomInt(0, total) inclusive draw).
 local function pool(codes)
@@ -56,6 +57,16 @@ local Lv2Epic = pool{
 local Lv2Artifact = pool{
     'I04I','I06D','I01M','I024',
 }
+
+-- Level-based loot tiers (war3map.j 34107 Lv_1_Item / 34242 Lv_2_Item). The two JASS
+-- triggers are identical bar the pool set and which is enabled; we keep one drop trigger
+-- that reads the active tier. Tier flips to 2 at the Level-10 victory (UpgradeLootTier,
+-- war3map.j 20538: DisableTrigger Lv_1_Item / EnableTrigger Lv_2_Item).
+local LOOT_TIERS = {
+    { unc = Lv1Uncommon, rare = Lv1Rare, epic = Lv1Epic, arti = Lv1Artifact },
+    { unc = Lv2Uncommon, rare = Lv2Rare, epic = Lv2Epic, arti = Lv2Artifact },
+}
+local lootTier = 1
 
 -- Set-item pools the Auction House stocks (war3map.j 32848-32891 / 33554+). 0-indexed to
 -- match the original's GetRandomInt(0, Total) inclusive draw. Totals (war3map.j 2699-2702):
@@ -110,15 +121,16 @@ function RegisterItemDropTriggers()
         RandomItemChance = GetRandomInt(1, 100)
         if ArtificierFeatOn then RandomItemChance = RandomItemChance + 1 end
 
+        local tier = LOOT_TIERS[lootTier]
         local loc = GetUnitLoc(GetDyingUnit())
         if RandomItemChance <= 60 then
-            CreateItemLoc(drawFrom(Lv1Uncommon), loc)
+            CreateItemLoc(drawFrom(tier.unc), loc)
         elseif RandomItemChance <= 90 then
-            CreateItemLoc(drawFrom(Lv1Rare), loc)
+            CreateItemLoc(drawFrom(tier.rare), loc)
         elseif RandomItemChance <= 97 then
-            CreateItemLoc(drawFrom(Lv1Epic), loc)
+            CreateItemLoc(drawFrom(tier.epic), loc)
         else
-            CreateItemLoc(drawFrom(Lv1Artifact), loc)
+            CreateItemLoc(drawFrom(tier.arti), loc)
             local killer = GetKillingUnitBJ()
             local who = killer and GetPlayerName(GetOwningPlayer(killer)) or "Someone"
             DisplayTextToForce(GetPlayersAll(),
@@ -127,6 +139,14 @@ function RegisterItemDropTriggers()
         end
         RemoveLocation(loc)
     end)
+end
+
+-- Loot-tier upgrade fired by the Level-10 victory (war3map.j 20538-20543): kill-drops and
+-- the treasure-chest pinata switch to the Lv2 pools / Lv2 chest model (h05E). The matching
+-- scroll-drop upgrade (Circle 0 -> 1) lives in scrolls.lua (UpgradeScrollTier).
+function UpgradeLootTier()
+    lootTier = 2
+    TreasureChestLevel2 = true
 end
 
 -- ── Dungeon / Treasure chests (war3map.j 34602-34935; Dungeon Chest Level 0/1/2) ──
@@ -278,6 +298,61 @@ function RegisterWorldDropTriggers()
         if IsUnitHidden(d) then return end
         CreateItem(WORLD_UNIT_DROPS[GetUnitTypeId(d)], GetUnitX(d), GetUnitY(d))
     end)
+end
+
+-- ── Cursed item drop (war3map.j 33603-33672, 35240-35249; items/Items.md §3) ──
+-- A one-cursed-drop-per-game mechanic. Each level start runs a d10 roll
+-- (Cursed_Item_Drop_1_to_10, war3map.j 33603) escalated by CursedItemBonus, which
+-- starts at 0 (InitGlobals 2632) and self-increments by 1 on every failed roll
+-- (war3map.j 33628) — so the chance of arming climbs each level. The FIRST roll that
+-- hits >=10 disarms the roll (CursedItemOn=false) and arms the actual-drop trigger.
+-- That trigger (Cursed_Actual_Drop_For_Level_1_to_10, war3map.j 33642) starts DISABLED
+-- and, once armed, waits for 20 further Player(9) deaths (CursedKillDropCounter) before
+-- dropping one of two cursed items (I095 / I0B8) at the 21st kill's corpse, then disables
+-- itself. The two cursed item ids are seeded by Lv_1_Cursed_Item_Drop (war3map.j 35240,
+-- a T+30s timer in the original); since registration already runs after load we seed the
+-- Lv1CursedItemDrop pool here directly. (The original's DEBUG DisplayTextToForce spam at
+-- 33619/33623/33624 is intentionally not ported.)
+local cursedActualDrop  -- the armed-but-disabled drop trigger, shared by the roll
+
+function RegisterCursedItemTriggers()
+    -- Seed the cursed pool (war3map.j 35241-35242 — originally a T+30s single timer).
+    Lv1CursedItemDrop[1] = FourCC('I095')
+    Lv1CursedItemDrop[2] = FourCC('I0B8')
+
+    -- Cursed_Actual_Drop_For_Level_1_to_10 (war3map.j 33642) — starts disabled; armed by
+    -- CursedItemRoll(). Fires on the 21st Player(9) death after arming, then disables itself.
+    local t = CreateTrigger()
+    cursedActualDrop = t
+    DisableTrigger(t)
+    TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(t, Condition(function()
+        return GetOwningPlayer(GetDyingUnit()) == Player(9)
+    end))
+    TriggerAddAction(t, function()
+        if CursedKillDropCounter >= 20 then
+            local d = GetDyingUnit()
+            CreateItem(Lv1CursedItemDrop[GetRandomInt(1, 2)], GetUnitX(d), GetUnitY(d))
+            DisableTrigger(t)
+        else
+            CursedKillDropCounter = CursedKillDropCounter + 1
+        end
+    end)
+end
+
+-- Cursed_Item_Drop_1_to_10 (war3map.j 33603) — the per-level roll. Wire into the per-level
+-- start (the original fires it via ConditionalTriggerExecute at war3map.j 7405 / 19181).
+-- No-op once a cursed drop has been armed (CursedItemOn=false). On a roll of >=10 it disarms
+-- itself and arms the actual-drop trigger; otherwise it bumps CursedItemBonus for next level.
+function CursedItemRoll()
+    if not CursedItemOn then return end
+    CursedItemDrop = GetRandomInt(1, 10) + CursedItemBonus
+    if CursedItemDrop >= 10 then
+        CursedItemOn = false
+        if cursedActualDrop then EnableTrigger(cursedActualDrop) end
+    else
+        CursedItemBonus = CursedItemBonus + 1
+    end
 end
 
 -- ── Boss drops (war3map.j 31906-32033; bosses/Bosses.md §1) ──
@@ -445,46 +520,57 @@ function RegisterSetTriggers()
     end)
 end
 
--- ── Purchase loot-boxes (war3map.j 35016-35123) ──
+-- ── Purchase loot-boxes (war3map.j 35013-35235) ──
 -- Players buy a token item from a base shop (e.g. n000 sells the Lv1 box 'I00N'); picking
 -- it up consumes it and grants a random item from the rarity pools straight to inventory.
--- Lv1 only for now (Lv2 pools + scroll boxes not ported). economy/Economy.md §5.
+-- Four tokens map to two box types × two tiers; the four near-identical JASS triggers
+-- collapse into two parameterized helpers. economy/Economy.md §5.
 function RegisterPurchaseTriggers()
-    -- 'I00N' — Lv1 item box: rarity-rolled (60/30/7/3%), item added to the buyer.
-    local box = CreateTrigger()
-    TriggerRegisterAnyUnitEventBJ(box, EVENT_PLAYER_UNIT_PICKUP_ITEM)
-    TriggerAddCondition(box, Condition(function()
-        return GetItemTypeId(GetManipulatedItem()) == FourCC('I00N')
-    end))
-    TriggerAddAction(box, function()
-        RemoveItem(GetManipulatedItem())
-        local buyer = GetManipulatingUnit()
-        RandomItemChance = GetRandomInt(1, 100)
-        if ArtificierFeatOn then RandomItemChance = RandomItemChance + 1 end
-        if RandomItemChance <= 60 then
-            UnitAddItemByIdSwapped(drawFrom(Lv1Uncommon), buyer)
-        elseif RandomItemChance <= 90 then
-            UnitAddItemByIdSwapped(drawFrom(Lv1Rare), buyer)
-        elseif RandomItemChance <= 97 then
-            UnitAddItemByIdSwapped(drawFrom(Lv1Epic), buyer)
-        else
-            UnitAddItemByIdSwapped(drawFrom(Lv1Artifact), buyer)
-            DisplayTextToForce(GetPlayersAll(),
-                GetPlayerName(GetOwningPlayer(buyer)) .. " |cffff0000discovered |r" .. GetItemName(GetLastCreatedItem()))
-            PlaySoundBJ(snd.AllianceSound)
-        end
-    end)
+    -- One PICKUP trigger per token id, running the given grant action.
+    local function onBoxPickup(tokenId, grant)
+        local t = CreateTrigger()
+        TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+        TriggerAddCondition(t, Condition(function()
+            return GetItemTypeId(GetManipulatedItem()) == tokenId
+        end))
+        TriggerAddAction(t, function()
+            RemoveItem(GetManipulatedItem())
+            grant(GetManipulatingUnit())
+        end)
+    end
 
-    -- 'I0AR' — Lv1 epic box: always grants a random Lv1 epic.
-    local epicBox = CreateTrigger()
-    TriggerRegisterAnyUnitEventBJ(epicBox, EVENT_PLAYER_UNIT_PICKUP_ITEM)
-    TriggerAddCondition(epicBox, Condition(function()
-        return GetItemTypeId(GetManipulatedItem()) == FourCC('I0AR')
-    end))
-    TriggerAddAction(epicBox, function()
-        RemoveItem(GetManipulatedItem())
-        UnitAddItemByIdSwapped(drawFrom(Lv1Epic), GetManipulatingUnit())
-    end)
+    -- Full-rarity box: rarity-rolled (60/30/7/3%), item added to the buyer. The artifact
+    -- roll (>=98) announces the find. Artificier feat nudges the roll +1 (war3map.j 35067).
+    local function fullBox(tokenId, tier)
+        onBoxPickup(tokenId, function(buyer)
+            RandomItemChance = GetRandomInt(1, 100)
+            if ArtificierFeatOn then RandomItemChance = RandomItemChance + 1 end
+            if RandomItemChance <= 60 then
+                UnitAddItemByIdSwapped(drawFrom(tier.unc), buyer)
+            elseif RandomItemChance <= 90 then
+                UnitAddItemByIdSwapped(drawFrom(tier.rare), buyer)
+            elseif RandomItemChance <= 97 then
+                UnitAddItemByIdSwapped(drawFrom(tier.epic), buyer)
+            else
+                UnitAddItemByIdSwapped(drawFrom(tier.arti), buyer)
+                DisplayTextToForce(GetPlayersAll(),
+                    GetPlayerName(GetOwningPlayer(buyer)) .. " |cffff0000discovered |r" .. GetItemName(GetLastCreatedItem()))
+                PlaySoundBJ(snd.AllianceSound)
+            end
+        end)
+    end
+
+    -- Epic box: always grants a random epic from the tier.
+    local function epicBox(tokenId, tier)
+        onBoxPickup(tokenId, function(buyer)
+            UnitAddItemByIdSwapped(drawFrom(tier.epic), buyer)
+        end)
+    end
+
+    fullBox(FourCC('I00N'), LOOT_TIERS[1])   -- Lv1 item box   (war3map.j 35016)
+    epicBox(FourCC('I0AR'), LOOT_TIERS[1])   -- Lv1 epic box   (war3map.j 35105)
+    fullBox(FourCC('I03S'), LOOT_TIERS[2])   -- Lv2 item box   (war3map.j 35151)
+    epicBox(FourCC('I0AV'), LOOT_TIERS[2])   -- Lv2 epic box   (war3map.j 35128)
 end
 
 -- ── Auction House (war3map.j 6283-6375, 10066-10152; economy/Economy.md §1) ──

@@ -177,7 +177,14 @@ function RegisterDebugCommands()
     end
     cmd("-item", false, gated(function() spawnLoot(argTwo()) end))
     cmd("-mythic", true, gated(function() spawnLoot("artifact") end))
-    cmd("-cursed", true, gated(function() tell(GetTriggerPlayer(), "[debug] cursed-item pool not ported yet") end))
+    cmd("-cursed", true, gated(function()
+        local h = heroOf(GetTriggerPlayer())
+        if not h then return end
+        local id = Lv1CursedItemDrop[GetRandomInt(1, 2)]
+        if not id then tell(GetTriggerPlayer(), "[debug] cursed pool empty"); return end
+        CreateItem(id, GetUnitX(h), GetUnitY(h))
+        tell(GetTriggerPlayer(), "[debug] dropped a cursed item")
+    end))
 
     -- ── reveal + revive ──
     cmd("-revealmap", true, gated(function()

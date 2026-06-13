@@ -151,4 +151,27 @@ function RegisterCompanionAI()
         DefendingSilmeria = false
         EnableTrigger(pp); EnableTrigger(bp); EnableTrigger(ta); EnableTrigger(gh)
     end)
+
+    -- ── Item auto-discard: the companion can wander over loot meant for the players. When an
+    --    H04Y picks up a consumable (health potion I0BU, herbs I040/I042/I05K) it is removed
+    --    from every H04Y so the AI never hoards/consumes it (war3map.j blue_removes_* 5908-6021).
+    --    The four near-identical triggers collapse into one keyed on a small id set.
+    local DISCARD = {
+        [FourCC('I0BU')] = true, [FourCC('I040')] = true,
+        [FourCC('I042')] = true, [FourCC('I05K')] = true,
+    }
+    local rm = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(rm, EVENT_PLAYER_UNIT_PICKUP_ITEM)
+    TriggerAddCondition(rm, Condition(function()
+        return GetUnitTypeId(GetManipulatingUnit()) == FourCC('H04Y')
+            and DISCARD[GetItemTypeId(GetManipulatedItem())] == true
+    end))
+    TriggerAddAction(rm, function()
+        local id = GetItemTypeId(GetManipulatedItem())
+        local g = companionGroup()
+        ForGroup(g, function()
+            RemoveItem(GetItemOfTypeFromUnitBJ(GetEnumUnit(), id))
+        end)
+        DestroyGroup(g)
+    end)
 end
