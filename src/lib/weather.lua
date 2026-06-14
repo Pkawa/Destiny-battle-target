@@ -122,13 +122,13 @@ W[25].mechEffect = function()
     end
 end
 
--- W26 Midnight Storm: black cinematic filter for 90s (blinds players).
+-- W26 Midnight Storm: night + rain + lightning flashes + thunder for 90s (storm.lua).
+-- StartStorm(..., night=true) freezes the day/night cycle at midnight so the directional-light
+-- flashes dramatically reveal the dark terrain (the Storm-example look). This replaces the
+-- original's flat black cinematic filter, which dimmed everything uniformly (incl. the flashes)
+-- and so couldn't produce the reveal. Deviation — see environment/Weather.md §Deviation.
 W[26].mechEffect = function()
-    CinematicFilterGenericBJ(3.0, BLEND_MODE_BLEND,
-        "ReplaceableTextures\\CameraMasks\\Black_mask.blp",
-        100, 100, 100, 100, 0, 0, 0, 35.0)
-    DisplayCineFilterBJ(true)
-    After(90.0, function() DisplayCineFilterBJ(false) end)
+    StartStorm(rct.EntireGameArea, 90.0, true)
 end
 
 -- W27 Dryad's Tears: boosts energy regen (+2) for 90s (EnergyRegenTotal system).
@@ -172,15 +172,30 @@ end
 
 local activeWeather = nil
 
+-- Remove the currently-showing weather visual, if any. Safe to call repeatedly.
+local function clearWeather()
+    if activeWeather then
+        RemoveWeatherEffect(activeWeather)
+        activeWeather = nil
+    end
+end
+
 local function applyWeather(entry)
     DisplayTimedTextToForce(GetPlayersAll(), 12.0, "|cffaaccffWeather: " .. entry.name .. "|r")
+    -- ALWAYS drop the prior weather first — even when this weather has no visual of its own.
+    -- BUG FIX (triage-5): previously the remove lived inside `if entry.effect`, so switching from
+    -- Blizzard (has a visual) to a no-visual weather like Midnight Storm (26) left the snow falling
+    -- forever ("Blizzard doesn't clear").
+    clearWeather()
     if entry.effect then
-        if activeWeather then RemoveWeatherEffect(activeWeather) end
         activeWeather = AddWeatherEffectSaveLast(rct.EntireGameArea, entry.effect)
+        EnableWeatherEffect(activeWeather, true)   -- AddWeatherEffect(SaveLast) creates it DISABLED;
+        -- the JASS enables it on the next line every time (war3map.j 30316 etc.).
         local e = activeWeather
         After(90.0, function()
-            if activeWeather == e then activeWeather = nil end
-            RemoveWeatherEffect(e)
+            -- Only remove if a newer weather hasn't already replaced (and removed) this one —
+            -- otherwise we'd double-free e.
+            if activeWeather == e then clearWeather() end
         end)
     end
     if entry.mechEffect then entry.mechEffect() end
@@ -192,15 +207,33 @@ function RollWeather()
     -- at each per-level weather roll (war3map.j 30286). trg_Sabotage_Reset is created in abilities.lua;
     -- ConditionalTriggerExecute only restores when SabotageOn is set (matching the JASS condition).
     if trg_Sabotage_Reset then ConditionalTriggerExecute(trg_Sabotage_Reset) end
+    StopStorm()   -- end any lightning storm left over from a previous level's Midnight Storm
     local n = GetRandomInt(1, 31)
     RandomWeather = n
     DenyWeather = 0
     local entry = W[n]
-    if not entry then return end                  -- 1-14 / unmapped → clear
+    if not entry then clearWeather(); return end  -- 1-14 / unmapped → clear (and drop prior visual)
     if entry.negative and MeteorlogistFeatOn and GetRandomInt(1, 2) == 2 then
         DenyWeather = 2
+        clearWeather()                            -- denied → no new weather; clear the prior one too
         DisplayTimedTextToForce(GetPlayersAll(), 8.0,
             "|cff88ccffNegative weather (" .. entry.name .. ") prevented by the Meteorologist feat.|r")
+        return
+    end
+    applyWeather(entry)
+end
+
+-- Debug-only: force weather N right now, bypassing the roll (debug.lua "-weather"). Lets you
+-- watch a specific effect (e.g. 26 = Midnight Storm + lightning) without level-rolling for it.
+function ForceWeather(n)
+    StopStorm()
+    DisplayCineFilterBJ(false)   -- clear a lingering Midnight Storm darken when hopping weathers via -weather
+    RandomWeather = n
+    DenyWeather = 0
+    local entry = W[n]
+    if not entry then
+        clearWeather()
+        DisplayTimedTextToForce(GetPlayersAll(), 6.0, "|cffaaccffWeather " .. n .. " = clear (no effect).|r")
         return
     end
     applyWeather(entry)

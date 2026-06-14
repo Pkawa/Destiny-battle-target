@@ -15,6 +15,25 @@ function IsHumanPlayer(p)
         and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING
 end
 
+-- Cosmetic/decoy units that share UNIT_TYPE_HERO but are NOT a player's pick. They must be
+-- skipped by the feat-area sweep and hero counts, otherwise they get teleported into the feat
+-- area and (being un-feat-able) stall the feat phase. The original avoids this only by timing —
+-- these spawn from in-game abilities, which normally happens after feats; but a hero can learn
+-- a skill during the (paused) selection phase, dragging the flair unit into feats (the "Linna
+-- The Pretty One" report). Source units: Swashbuckler Derring-Do flair / Border Skirmisher decoys.
+local NON_PLAYER_HEROES = {
+    [FourCC('h03X')] = true,  -- Linna "The Pretty One" (Derring-Do flair + Skirmisher decoy)
+    [FourCC('h03V')] = true,  -- Border Skirmisher decoy
+    [FourCC('h03W')] = true,  -- Border Skirmisher decoy
+    [FourCC('h04P')] = true,  -- Border Skirmisher decoy (rank 2)
+}
+
+-- True only for a real picked/assigned hero — excludes the cosmetic units above. Global so
+-- feats.lua (ResolveCompanionFeats) shares the same definition.
+function IsPlayerHero(u)
+    return IsUnitType(u, UNIT_TYPE_HERO) and not NON_PLAYER_HEROES[GetUnitTypeId(u)]
+end
+
 local function CountHumanPlayers()
     local n = 0
     for i = 0, 7 do
@@ -342,7 +361,7 @@ function BeginningStart()
         local heroCount = 0
         local grp = GetUnitsInRectAll(GetPlayableMapRect())
         ForGroup(grp, function()
-            if IsUnitType(GetEnumUnit(), UNIT_TYPE_HERO) then
+            if IsPlayerHero(GetEnumUnit()) then
                 heroCount = heroCount + 1
             end
         end)
@@ -401,13 +420,22 @@ function PickFeat()
     ForGroup(grp, function()
         local u = GetEnumUnit()
         local owner = GetOwningPlayer(u)
-        if IsUnitType(u, UNIT_TYPE_HERO)
+        if IsPlayerHero(u)
             and owner ~= Player(8) and owner ~= Player(11) and owner ~= Player(12) then
             SetUnitPosition(u, GetRectCenterX(rct.FeatArea), GetRectCenterY(rct.FeatArea))
             PauseUnit(u, false)
         end
     end)
     DestroyGroup(grp)
+
+    -- Unpause EVERY unit in the feat area — crucially the feat SHOPS (n00B/E/J/L). BUG FIX
+    -- (bug 2): Random mode runs PauseAllUnitsBJ(true) for its hero-reveal, which freezes the
+    -- shops; a paused shop sells nothing, so the feat menu was empty and players were forced
+    -- onto the A05R default. The original unpauses the feat area here (war3map.j Pick_Feat
+    -- Func008002). Pick mode never paused them, which is why it appeared to work.
+    local featGrp = GetUnitsInRectAll(rct.EntireFeatArea)
+    ForGroup(featGrp, function() PauseUnit(GetEnumUnit(), false) end)
+    DestroyGroup(featGrp)
 
     -- Start feat timer (120 seconds)
     StartTimerBJ(PickFeatTimer, false, 120.0)
@@ -428,7 +456,7 @@ local function OnFeatTimerExpires()
     local grp = GetUnitsInRectAll(rct.EntireFeatArea)
     ForGroup(grp, function()
         local u = GetEnumUnit()
-        if IsUnitType(u, UNIT_TYPE_HERO) then
+        if IsPlayerHero(u) then
             UnitAddAbilityBJ(FourCC('A05R'), u)
             SetUnitPosition(u, GetRectCenterX(rct.StartingPlayerArea), GetRectCenterY(rct.StartingPlayerArea))
         end
@@ -453,7 +481,7 @@ local function CheckAllLeftFeatArea()
     local humanHeroes = 0
     ForGroup(grp, function()
         local heroUnit = GetEnumUnit()
-        if IsUnitType(heroUnit, UNIT_TYPE_HERO) and IsHumanPlayer(GetOwningPlayer(heroUnit)) then
+        if IsPlayerHero(heroUnit) and IsHumanPlayer(GetOwningPlayer(heroUnit)) then
             humanHeroes = humanHeroes + 1
         end
     end)
@@ -488,7 +516,7 @@ function BeginningStart2()
         local grp = GetUnitsInRectAll(GetPlayableMapRect())
         ForGroup(grp, function()
             local u = GetEnumUnit()
-            if IsUnitType(u, UNIT_TYPE_HERO)
+            if IsPlayerHero(u)
                 and GetOwningPlayer(u) ~= Player(8)
                 and GetOwningPlayer(u) ~= Player(11)
                 and GetOwningPlayer(u) ~= Player(12) then

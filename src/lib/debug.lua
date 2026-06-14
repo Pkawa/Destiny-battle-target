@@ -54,6 +54,7 @@ local HELP = {
     "|cff00ff00=== DEBUG COMMANDS (gate: -debug) ===|r",
     "-debug help : show this  |  -stop : toggle wave auto-advance",
     "-wave : next waves  |  -goto N : jump to level N  |  -kill : clear wave",
+    "-weather N : force weather 15-31 (default 26 = Midnight Storm + lightning)",
     "-lvl N : set hero level  |  -gold N : give gold  |  -tp : hero to cursor",
     "-item POOL [name] : spawn loot — unc/rare/epic/arti/scroll/tarot/set/all (name = filter)",
     "-item treats : spawn Radley's Treats (the pup follows whoever holds them)",
@@ -122,6 +123,11 @@ function RegisterDebugCommands()
         local n = argInt(1)
         CurrentLevel = n
         StartLevel(n)
+    end))
+    cmd("-weather", false, gated(function()
+        local n = argInt(26)   -- default 26 = Midnight Storm (lightning + thunder)
+        tell(GetTriggerPlayer(), "[debug] forcing weather " .. n)
+        ForceWeather(n)
     end))
     cmd("-kill", true, gated(function()
         local g = GetUnitsInRectOfPlayer(rct.EntireGameArea, Player(9))

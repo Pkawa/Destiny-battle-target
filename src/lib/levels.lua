@@ -891,6 +891,13 @@ local function setupLevel14()
     local gen = levelGen
     local CARAVAN = FourCC('h01A')
 
+    -- Trap ambushers, kept locked onto the caravan. The town-harassment waves below re-order
+    -- ALL Player-9 units to patrol the base every wave (faithful to war3map.j Spawn_Attack), which
+    -- was yanking the trap ambushers off the caravan and sending them to the base too (triage-4
+    -- #1). Deviation: ambushers are tracked here and excluded from that base re-order so they stay
+    -- on the caravan — the escort threat the traps are meant to be.
+    local ambush = {}
+
     local function caravan()
         local g = GetUnitsOfTypeIdAll(CARAVAN)
         local u = GroupPickRandomUnit(g)
@@ -921,8 +928,10 @@ local function setupLevel14()
         TriggerSleepAction(1.0)
         local g = GetUnitsInRectOfPlayer(r, P9)
         ForGroup(g, function()
+            local e = GetEnumUnit()
+            ambush[e] = true            -- exempt from the base-patrol re-order below
             local tgt = caravan()
-            if tgt then IssueTargetOrderBJ(GetEnumUnit(), "attack", tgt) end
+            if tgt then IssueTargetOrderBJ(e, "attack", tgt) end
         end)
         DestroyGroup(g)
         holdCaravan()
@@ -1120,8 +1129,10 @@ local function setupLevel14()
             end
             local g = GetUnitsOfPlayerAll(P9)
             ForGroup(g, function()
-                if GetUnitTypeId(GetEnumUnit()) ~= FourCC('O002') then
-                    IssuePointOrderLoc(GetEnumUnit(), "patrol", GetRectCenter(rct.StartingPlayerArea))
+                local u = GetEnumUnit()
+                -- Skip the boss AND trap ambushers — the latter stay on the caravan (triage-4 #1).
+                if GetUnitTypeId(u) ~= FourCC('O002') and not ambush[u] then
+                    IssuePointOrderLoc(u, "patrol", GetRectCenter(rct.StartingPlayerArea))
                 end
             end)
             DestroyGroup(g)

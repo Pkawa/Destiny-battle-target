@@ -184,4 +184,19 @@ function InitSounds()
     SetSoundParamsFromLabel(snd.WaterWaterFallLoop1, "WaterfallLoop")
     SetSoundDuration(snd.WaterWaterFallLoop1, 16718)
     SetSoundVolume(snd.WaterWaterFallLoop1, 120)
+
+    -- Thunder for the storm (storm.lua). T1-3.wav imported from the Storm v1.3.1 system
+    -- (war3mapImported, listed in war3map.imp). 2D (global) sounds. WC3 caps per-sound volume at
+    -- 127 (already max), so to make the growl LOUDER we create several handles per clip and start
+    -- them together — the stacked copies sum to a louder result. snd.Thunder[clip] = {handles…}.
+    local STACK = 3   -- copies played at once ≈ ~2x perceived loudness (bump for louder)
+    snd.Thunder = {}
+    for i = 1, 3 do
+        snd.Thunder[i] = {}
+        for j = 1, STACK do
+            local s = CreateSound("war3mapImported/T" .. i .. ".wav", false, false, false, 0, 0, "DefaultEAXON")
+            SetSoundVolume(s, 127)
+            snd.Thunder[i][j] = s
+        end
+    end
 end

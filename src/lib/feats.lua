@@ -586,7 +586,7 @@ function ResolveCompanionFeats()
     local grp = GetUnitsInRectAll(rct.EntireFeatArea)
     ForGroup(grp, function()
         local hero = GetEnumUnit()
-        if IsUnitType(hero, UNIT_TYPE_HERO) then
+        if IsPlayerHero(hero) then
             ModifyHeroStat(bj_HEROSTAT_STR, hero, bj_MODIFYMETHOD_ADD, 2)
             statLevelHeroes[hero] = function(h)
                 ModifyHeroStat(bj_HEROSTAT_STR, h, bj_MODIFYMETHOD_ADD, 2)
