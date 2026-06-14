@@ -33,6 +33,23 @@ function registerItemUseFX(itemId, base, perLevel, apply)
     ItemUseFX[itemId] = { base = base, perLevel = perLevel, apply = apply }
 end
 
+-- On-attack proc items (require the DDS — items/ItemEffects.md §4). Ordered sequence so the
+-- per-attack scan is sync-safe. Each item grants a native on-hit proc (poison/frost) in its
+-- object data that deals a FLAT amount; we add an ADDITIVE hero-level bonus on the same proc
+-- chance through the DDS, so base 0 (native keeps its flat hit) + perLevel × heroLevel — no
+-- object-data change, no double-dip.
+ItemProcFX = {}   -- [n] = { itemId, chance, base, perLevel, attackType, damageType }
+function registerItemProcFX(itemCode, chance, base, perLevel, attackType, damageType)
+    ItemProcFX[#ItemProcFX + 1] = {
+        itemId     = FourCC(itemCode),
+        chance     = chance,
+        base       = base,
+        perLevel   = perLevel,
+        attackType = attackType or ATTACK_TYPE_NORMAL,
+        damageType = damageType or DAMAGE_TYPE_NORMAL,
+    }
+end
+
 -- ── apply-builders (common effect shapes; reduce per-item boilerplate) ─────────
 -- apply runs inside the triggering spell's context, so point-target spells can read
 -- GetSpellTargetX()/Y() directly inside a custom apply when there's no target unit.
@@ -116,6 +133,28 @@ function RegisterItemEffectTriggers()
         local user = GetManipulatingUnit()
         fx.apply(user, item, Scaled(fx.base, fx.perLevel, user) * ItemScaleFactor)
     end)
+
+    -- On-attack procs: when an attack lands, each registered proc item the attacker
+    -- carries rolls its chance and adds scaled bonus damage via the DDS. Cheap — only
+    -- runs on attack damage, and the inventory check short-circuits for units without
+    -- the item. Bonus damage is dealt with DDS.damage so it can't re-trigger the proc.
+    if #ItemProcFX > 0 then
+        DDS.register(function()
+            if not DDS.isAttack() then return end
+            local src = DDS.source()
+            if not src or GetUnitTypeId(src) == 0 then return end
+            local tgt = DDS.target()
+            for i = 1, #ItemProcFX do
+                local p = ItemProcFX[i]
+                if UnitHasItemOfTypeBJ(src, p.itemId) and GetRandomInt(1, 100) <= p.chance then
+                    local amount = Scaled(p.base, p.perLevel, src) * ItemScaleFactor
+                    if amount > 0 then
+                        DDS.damage(src, tgt, amount, p.attackType, p.damageType)
+                    end
+                end
+            end
+        end)
+    end
 end
 
 -- ── Registered item effects ───────────────────────────────────────────────────
@@ -152,6 +191,14 @@ do
         fxDamageArea(900, false, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC))  -- I01Q Wand of Infernos: 450 AoE (+5/lvl)
     registerItemFX(FourCC('A02B'), 0, 5, fxHealSelf())  -- I00Q Ankh of Vitality: heal 50 on use (+5/lvl)
 end
+
+-- On-attack proc items (routed through the DDS, see RegisterItemEffectTriggers). The item's
+-- object-data proc keeps dealing its flat poison/frost; these rows add the hero-level GROWTH
+-- (base 0 + perLevel × heroLevel) on the same chance, so the proc scales into the late game.
+-- (ItemEffects.md §4: I01K Rusty Maul = 10% poison-on-hit; I01M Blade of the Coral Masters =
+--  15% 100-frost-on-hit. Tune chance/perLevel or ItemScaleFactor for balance.)
+registerItemProcFX('I01K', 10, 0, 5, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_POISON)  -- Rusty Maul
+registerItemProcFX('I01M', 15, 0, 5, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_COLD)    -- Blade of the Coral Masters
 
 -- To register more: read the item's A0xx ability base in dirty/objects_items.json +
 -- objects_abilities.json (triage via dirty/item_triage2.py), pick perLevel, add a row.

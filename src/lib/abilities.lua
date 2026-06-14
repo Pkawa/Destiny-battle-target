@@ -110,12 +110,30 @@ local function setupEngineer()
         { 'R01L', 'R005' }, { 'R008', 'R01R' }, { 'R01V', 'R020' },
         { 'R022', 'R026' }, { 'R02A', 'R02H' },
     }
+    -- Gold Fabricators (war3map.j 44462-44477): once Construction is learned, a 10s tick
+    -- pays EngineerPlayer per living fabricator building (tier 1/2/3/4 → +1/2/3/4 gold each).
+    -- The original keeps the periodic trigger disabled until the first Construction learn,
+    -- then enables it; we lazily start one shared timer on that first learn.
+    local fabricatorsRunning = false
     OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
         return GetLearnedSkillBJ() == FourCC('A01E')
     end, function()
         EngineerPlayer = GetOwningPlayer(GetLearningUnit())
         ConstructionResearch = ConstructionResearch + 1
-        -- (Gold Fabricators economy trigger is ⬜ — its enable is skipped until that lands.)
+        if not fabricatorsRunning then
+            fabricatorsRunning = true
+            Every(10.0, function()
+                local p = EngineerPlayer
+                if not p then return end
+                local gold = CountLivingPlayerUnitsOfTypeId(FourCC('h05Y'), p) * 1
+                           + CountLivingPlayerUnitsOfTypeId(FourCC('h05Z'), p) * 2
+                           + CountLivingPlayerUnitsOfTypeId(FourCC('h060'), p) * 3
+                           + CountLivingPlayerUnitsOfTypeId(FourCC('h061'), p) * 4
+                if gold > 0 then
+                    AdjustPlayerStateBJ(gold, p, PLAYER_STATE_RESOURCE_GOLD)
+                end
+            end)
+        end
         local batch = CONSTRUCTION[ConstructionResearch]
         if batch then setResearched(EngineerPlayer, batch) end
         BlzUnitHideAbility(GetLearningUnit(), FourCC('A01E'), true)

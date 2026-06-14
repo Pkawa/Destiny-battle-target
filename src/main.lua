@@ -96,7 +96,9 @@ RegisterDojoTriggers()
 -- Register loot-box purchases (buy a box token from a base shop -> random pool item)
 RegisterPurchaseTriggers()
 
--- Register the item-effect dispatch (scaling actives; registry filled per item — items/ItemEffects.md)
+-- Start the damage-detection system (port-side infra), then the item-effect dispatch
+-- (scaling cast actives + on-attack procs; registry filled per item — items/ItemEffects.md).
+RegisterDDS()
 RegisterItemEffectTriggers()
 
 -- Register bulk sell, item shop, and supply stocking systems (economy/Economy.md §3-6)
