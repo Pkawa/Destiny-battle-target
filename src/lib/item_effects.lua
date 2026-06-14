@@ -192,6 +192,21 @@ do
     registerItemFX(FourCC('A02B'), 0, 5, fxHealSelf())  -- I00Q Ankh of Vitality: heal 50 on use (+5/lvl)
 end
 
+-- Lv2 / set-pool damage & heal actives (triage: dirty/item_triage_lv2.py → dirty/lv2_triage.txt,
+-- ItemEffects.md §3-E). Same ADDITIVE convention: the object-data ability keeps its flat
+-- base damage/heal, the script adds perLevel × heroLevel on top — no object-data change, no
+-- double-dip. These ability ids are all distinct from the Lv1 rows above, so they slot into
+-- the existing SPELL_EFFECT dispatch unchanged. (Lv1-pool set members that reuse a Lv1
+-- ability — I049/A03Z, I04B/A084 — are already covered by the shared Lv1 registrations.)
+do
+    local nuke = fxDamage(ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC)
+    registerItemFX(FourCC('A06L'), 0, 5, nuke)         -- I03B Wand of Lightning Bolts: Storm Bolt 150 (+5/lvl)
+    registerItemFX(FourCC('A06G'), 0, 5, nuke)         -- I034 Hooked Dagger: Shadow Strike 175 +125 DoT (+5/lvl burst)
+    registerItemFX(FourCC('A06E'), 0, 5,
+        fxDamageArea(290, true, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_MAGIC))  -- I030 Halflings Sling: Fan of Knives 45 AoE (+5/lvl, r290 around hero)
+    registerItemFX(FourCC('A0DE'), 0, 5, fxHeal())     -- I07I Woolen Bandages: heal 500/8s to target (+5/lvl burst)
+end
+
 -- On-attack proc items (routed through the DDS, see RegisterItemEffectTriggers). The item's
 -- object-data proc keeps dealing its flat poison/frost; these rows add the hero-level GROWTH
 -- (base 0 + perLevel × heroLevel) on the same chance, so the proc scales into the late game.
