@@ -11,11 +11,16 @@
 -- the leave-rect trigger in hero_selection.lua (CheckAllLeftFeatArea), which starts
 -- the game once all heroes have picked.
 --
--- The reference set its per-feat hero global AFTER a 2s sleep, which let a fast
--- player buy two feats. We set FeatPicked immediately (no sleep) so a second
--- purchase is rejected — fixes the double-feat exploit.
+-- In the reference, feats are strictly per-UNIT: a feat trigger adds the ability
+-- to the manipulating hero and relocates it out of the shop area instantly (no
+-- sleep), so that hero can't buy a second one, and the game starts only once the
+-- feat area holds no more heroes. We mirror that by keying the guard on the hero
+-- unit, NOT the player. Keying by player broke Wildbond, whose owner controls two
+-- hero units (main + pet) sharing one player id — the first to pick stripped the
+-- second's feat (KNOWN_BUGS #7). Each hero gets exactly one feat; the pet leaves
+-- the area via its own feat or the companion auto-pick.
 
-FeatPicked = {}  -- [playerId] = true once that player has chosen a feat
+FeatPicked = {}  -- [heroUnit] = true once that hero has chosen a feat
 
 -- Heroes that gain a per-level-up bonus, and the function that applies it.
 local statLevelHeroes = {}  -- [heroHandle] = function(hero)
@@ -538,17 +543,17 @@ local function OnFeatItemPickup()
 
     local hero  = GetManipulatingUnit()
     local owner = GetOwningPlayer(hero)
-    local pid   = GetPlayerId(owner)
 
-    -- Validation: one feat per player. Guard is set with no preceding sleep,
-    -- so a rapid second purchase is caught here.
-    if FeatPicked[pid] then
+    -- One feat per HERO (not per player). A rapid second purchase by the same
+    -- hero is caught here; a player's second hero (e.g. the Wildbond pet) is a
+    -- distinct key and keeps its own feat.
+    if FeatPicked[hero] then
         RemoveItem(itm)
         DisplayTextToForce(GetForceOfPlayer(owner),
-            "|cffff0000You have already chosen a feat.|r")
+            "|cffff0000This hero has already chosen a feat.|r")
         return
     end
-    FeatPicked[pid] = true
+    FeatPicked[hero] = true
 
     RemoveItem(itm)
     -- Move the hero out of the feat area — this fires the EntireFeatArea

@@ -87,7 +87,7 @@ function RegisterDebugCommands()
         local pid = GetPlayerId(p)
         repickPending[pid] = nil
         AssignHero(GetSoldUnit(), pid)
-        FeatPicked[pid] = nil
+        FeatPicked[GetSoldUnit()] = nil  -- fresh hero; ensure its feat guard is clear
         SetUnitPositionLoc(GetSoldUnit(), GetRectCenter(rct.FeatArea))
         CreateFogModifierRectBJ(true, p, FOG_OF_WAR_VISIBLE, rct.EntireFeatArea)
         PanCameraToTimedLocForPlayer(p, GetRectCenter(rct.FeatArea), 0)
@@ -154,9 +154,8 @@ function RegisterDebugCommands()
         local p = GetTriggerPlayer()
         local pid = GetPlayerId(p)
         local h = heroOf(p)
-        if h then RemoveUnit(h) end
+        if h then RemoveUnit(h); FeatPicked[h] = nil end
         repickPending[pid] = true
-        FeatPicked[pid] = nil
         local wisp = CreateUnit(p, FourCC('ewsp'),
             GetRectCenterX(rct.PickModeStart), GetRectCenterY(rct.PickModeStart), bj_UNIT_FACING)
         CreateFogModifierRectBJ(true, p, FOG_OF_WAR_VISIBLE, rct.PickMode)
