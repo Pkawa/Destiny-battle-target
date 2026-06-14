@@ -329,6 +329,12 @@ local SHIP_TIERS = {
 }
 local shipLoopOn = { false, false }
 
+-- Set of all merchant-ship unit ids (flattened from SHIP_TIERS) for SELL detection.
+local MERCHANT_SHIP_IDS = {}
+for _, tier in ipairs(SHIP_TIERS) do
+    for _, id in ipairs(tier) do MERCHANT_SHIP_IDS[id] = true end
+end
+
 local function isMerchantShip()
     local u = GetEnteringUnit()
     return GetOwningPlayer(u) == Player(8) and GetUnitTypeId(u) ~= FourCC('h06L')
@@ -358,6 +364,29 @@ local function registerShipWaypoints()
     end)
     OnEnterRect(rct.ShipDespawn, isMerchantShip, function()
         RemoveUnit(GetEnteringUnit())
+    end)
+end
+
+-- Deviation from JASS (playtest triage-2 bug #32): the merchant ships sell *land* units
+-- (mercenaries), but the original map has no handler relocating the bought unit. WC3 parks
+-- it next to the seller — which for a docked ship is deep water (unpathable) — so the
+-- engine reports "no room to be placed" and the unit is stuck. There is NO such SELL
+-- trigger in war3map.j (the ship cluster is purely waypoint movement, 27111-27276; the
+-- only EVENT_PLAYER_UNIT_SELL triggers, 17620 / 25191 / 25241, handle spirit/ballista
+-- tower rebuilds, not ship purchases). Fix: on SELL from a merchant ship, SetUnitPosition
+-- the sold unit onto the dock area — SetUnitPosition snaps to the nearest pathable cell,
+-- which lands the mercenary on the shore.
+local function registerMercenaryDisembark()
+    local t = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(t, EVENT_PLAYER_UNIT_SELL)
+    TriggerAddCondition(t, Condition(function()
+        return MERCHANT_SHIP_IDS[GetUnitTypeId(GetSellingUnit())] == true
+    end))
+    TriggerAddAction(t, function()
+        local bought = GetSoldUnit()
+        if not bought or GetUnitTypeId(bought) == 0 then return end
+        -- Snap to the nearest pathable cell around the dock (deep-water-safe).
+        SetUnitPosition(bought, GetRectCenterX(rct.ShipDockArea), GetRectCenterY(rct.ShipDockArea))
     end)
 end
 
@@ -464,6 +493,7 @@ function RegisterMiscTriggers()
     registerKillScoring()
     registerMidas()
     registerShipWaypoints()
+    registerMercenaryDisembark()
     registerRadley()
     registerSwallowAnchor()
 end

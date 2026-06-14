@@ -475,9 +475,10 @@ local SETS = {
     -- Rainbow Orb artifact (war3map.j 33521 — its own standalone trigger in the original,
     -- folded into the set dispatch here): left + right halves combine into the whole orb.
     { pieces = { 'I063', 'I06E' },         give = 'I06F', name = "the Rainbow Orb Artifact" },
-    -- Blackweave set (war3map.j 33119) — once-only. Set bonus (a 750 HP skeleton on the
-    -- wearer's death, via HeroWithBlackweave) is a separate mechanic, not yet ported (⬜).
-    { pieces = { 'I04F', 'I04G' },         give = 'I04H', once = true,
+    -- Blackweave set (war3map.j 33119) — once-only. Set bonus: a skeleton (h02Q, 900 HP)
+    -- spawns on the wearer's death, tracked via HeroWithBlackweave (war3map.j 33143-33215;
+    -- bonus + equip/unequip/death wiring lives in RegisterSetTriggers below).
+    { pieces = { 'I04F', 'I04G' },         give = 'I04H', once = true, blackweave = true,
       name = "the blackweave set!  This set may not be completed again" },
 }
 local setByPiece = {}
@@ -514,9 +515,51 @@ function RegisterSetTriggers()
                 bj_UNIT_FACING)
         end
         if s.once then s.done = true end
+        -- Blackweave set bonus: remember the wearer so their death spawns a skeleton
+        -- (war3map.j 33127).
+        if s.blackweave then HeroWithBlackweave = hero end
         PlaySoundBJ(snd.RestorationPotion or snd.AllianceSound)
         DisplayTextToForce(GetPlayersAll(), GetPlayerName(GetOwningPlayer(hero))
             .. " |cff32cd32Has finished " .. s.name .. "!|r")
+    end)
+
+    -- ── Blackweave set bonus (war3map.j 33143-33215) ──
+    -- A skeleton (h02Q, 900 HP baked into the unit object data) spawns at the
+    -- wearer's corpse when they die. HeroWithBlackweave tracks the current wearer: set on
+    -- set completion (above) and on re-picking up the finished item (Equip), cleared on
+    -- dropping it (UnEquip). The skeleton is owned by the dying unit's owner.
+    local I04H = FourCC('I04H')
+    local skeletonId = FourCC('h02Q')
+
+    -- Skeleton Effect (war3map.j 33145-33163): wearer dies -> spawn skeleton at corpse.
+    OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+        return GetDyingUnit() == HeroWithBlackweave
+    end, function()
+        local dead = GetDyingUnit()
+        local p, x, y = GetOwningPlayer(dead), GetUnitX(dead), GetUnitY(dead)
+        TriggerSleepAction(1.0)
+        CreateUnit(p, skeletonId, x, y, bj_UNIT_FACING)
+    end)
+
+    -- Equip (war3map.j 33192-33215): picking the finished set item back up re-attunes it.
+    OnAnyUnit(EVENT_PLAYER_UNIT_PICKUP_ITEM, function()
+        return not IsUnitIllusion(GetManipulatingUnit())
+            and GetItemTypeId(GetManipulatedItem()) == I04H
+    end, function()
+        local hero = GetManipulatingUnit()
+        DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(hero)),
+            "The Blackweave Cloth Set is now attuned to you.")
+        HeroWithBlackweave = hero
+    end)
+
+    -- UnEquip (war3map.j 33166-33189): dropping the finished set item detaches the bonus.
+    OnAnyUnit(EVENT_PLAYER_UNIT_DROP_ITEM, function()
+        return not IsUnitIllusion(GetManipulatingUnit())
+            and GetItemTypeId(GetManipulatedItem()) == I04H
+    end, function()
+        DisplayTextToForce(GetForceOfPlayer(GetOwningPlayer(GetManipulatingUnit())),
+            "The Blackweave Cloth Set is no longer attuned to you.")
+        HeroWithBlackweave = nil
     end)
 end
 
