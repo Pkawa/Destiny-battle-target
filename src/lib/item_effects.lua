@@ -215,6 +215,13 @@ end
 registerItemProcFX('I01K', 10, 0, 5, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_POISON)  -- Rusty Maul
 registerItemProcFX('I01M', 15, 0, 5, ATTACK_TYPE_NORMAL, DAMAGE_TYPE_COLD)    -- Blade of the Coral Masters
 
+-- NOT registered here (intentional): AIpr "Replenish Life/Mana over Duration" passives —
+-- I05T (A0AD) and I0A8 (A0HQ, Mendicant's Gloves, 225 HP/20s). AIpr is a passive
+-- replenish-on-acquire ability (Health-Stone family): no order string, no cooldown, so it
+-- never fires SPELL_EFFECT or USE_ITEM, and the reference war3map.j has zero trigger logic
+-- for it (only the drop-pool slot udg_Lv2Rare[23]='I0A8', line 35484). It is engine-applied
+-- object-data, handled by workstream D, not this registry. See ItemEffects.md §4-I0A8 / §4-D.
+--
 -- To register more: read the item's A0xx ability base in dirty/objects_items.json +
 -- objects_abilities.json (triage via dirty/item_triage2.py), pick perLevel, add a row.
 -- AoE/point nukes (Shockwave, War Stomp) need a custom apply that reads GetSpellTargetX/Y

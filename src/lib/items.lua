@@ -284,7 +284,7 @@ end
 local WORLD_UNIT_DROPS = {
     [FourCC('h039')] = FourCC('I0CG'),  -- southern overseer (22305,-4069)
     [FourCC('h06H')] = FourCC('I0BV'),  -- Dire Rat / "gargantuan rat" (Vern Sewers boss)
-    [FourCC('h06K')] = FourCC('I0C0'),  -- (-409,-9183)
+    [FourCC('h06K')] = ITEM.SwallowAnchor,  -- (-409,-9183)
     [FourCC('n016')] = FourCC('I0CE'),  -- Ice Dragon
 }
 function RegisterWorldDropTriggers()
@@ -360,19 +360,19 @@ end
 -- The four per-boss JASS triggers collapse into one registry + one death dispatch.
 -- (Meldokk's spell table lists I08T twice in the original — it always drops I08T.)
 local BOSS_DROPS = {
-    [FourCC('H00C')] = {  -- Meldokk (Level 6 miniboss)
+    [UID.PaladinCommander] = {  -- Meldokk (Level 6 miniboss)
         gear   = { FourCC('I075'), FourCC('I076'), FourCC('I074'), FourCC('I077') },
         spells = { FourCC('I08T') },
     },
-    [FourCC('O001')] = {  -- Goblin King (Level 10)
+    [UID.GoblinKing] = {  -- Goblin King (Level 10)
         gear   = { FourCC('I0A4'), FourCC('I0A5'), FourCC('I0A6'), FourCC('I0A7') },
         spells = { FourCC('I08V'), FourCC('I08U') },
     },
-    [FourCC('O002')] = {  -- Tidedweller (Level 14)
+    [UID.Tidedweller] = {  -- Tidedweller (Level 14)
         gear   = { FourCC('I0AE'), FourCC('I0AD'), FourCC('I0AF') },
         spells = { FourCC('I08W'), FourCC('I08X') },
     },
-    [FourCC('O004')] = {  -- Gnasher / Undead Behemoth (Level 20)
+    [UID.UndeadBehemoth] = {  -- Gnasher / Undead Behemoth (Level 20)
         gear   = { FourCC('I0C1'), FourCC('I0C2'), FourCC('I0C3') },
         spells = { FourCC('I0C4'), FourCC('I0C5') },
     },
@@ -610,8 +610,8 @@ function RegisterPurchaseTriggers()
         end)
     end
 
-    fullBox(FourCC('I00N'), LOOT_TIERS[1])   -- Lv1 item box   (war3map.j 35016)
-    epicBox(FourCC('I0AR'), LOOT_TIERS[1])   -- Lv1 epic box   (war3map.j 35105)
+    fullBox(ITEM.Lv1Box, LOOT_TIERS[1])   -- Lv1 item box   (war3map.j 35016)
+    epicBox(ITEM.Lv1EpicBox, LOOT_TIERS[1])   -- Lv1 epic box   (war3map.j 35105)
     fullBox(FourCC('I03S'), LOOT_TIERS[2])   -- Lv2 item box   (war3map.j 35151)
     epicBox(FourCC('I0AV'), LOOT_TIERS[2])   -- Lv2 epic box   (war3map.j 35128)
 end
@@ -748,7 +748,7 @@ function DebugSpawnItem(arg1, arg2, x, y)
     -- `-item treats` spawns Radley's Treats (I0BY) — the pup follows whoever holds it
     -- (see misc.lua registerRadley). Not part of any loot pool, so it's a special case.
     if arg1 == 'treats' or arg1 == 'treat' then
-        return GetItemName(CreateItem(FourCC('I0BY'), x, y)) or "Treats"
+        return GetItemName(CreateItem(ITEM.RadleyTreats, x, y)) or "Treats"
     end
 
     -- `-item set` spawns one COMPLETE set (all its pieces) instead of a single piece;
@@ -856,7 +856,7 @@ function RegisterItemShopTriggers()
     local shopT = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(shopT, EVENT_PLAYER_UNIT_RESEARCH_FINISH)
     TriggerAddCondition(shopT, Condition(function()
-        return GetResearched() == FourCC('R00M')
+        return GetResearched() == RES.ItemShop
     end))
     TriggerAddAction(shopT, function()
         PlaySoundBJ(snd.ResurrectTarget)
@@ -871,7 +871,7 @@ function RegisterItemShopTriggers()
     local upgradeT = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(upgradeT, EVENT_PLAYER_UNIT_RESEARCH_FINISH)
     TriggerAddCondition(upgradeT, Condition(function()
-        return GetResearched() == FourCC('R00N')
+        return GetResearched() == RES.ItemShopTrade
     end))
     TriggerAddAction(upgradeT, function()
         PlaySoundBJ(snd.ResurrectTarget)
@@ -927,7 +927,7 @@ function RegisterSupplyStockingTriggers()
     local stockT = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(stockT, EVENT_PLAYER_UNIT_RESEARCH_FINISH)
     TriggerAddCondition(stockT, Condition(function()
-        return GetResearched() == FourCC('R00J')
+        return GetResearched() == RES.SupplyStocking
     end))
     TriggerAddAction(stockT, function()
         PlaySoundBJ(snd.ResurrectTarget)
@@ -938,19 +938,19 @@ function RegisterSupplyStockingTriggers()
             local p = Player(i)
             if GetPlayerController(p) == MAP_CONTROL_USER
                 and GetPlayerSlotState(p) == PLAYER_SLOT_STATE_PLAYING then
-                SetPlayerTechResearchedSwap(FourCC('R00J'), 1, p)
+                SetPlayerTechResearchedSwap(RES.SupplyStocking, 1, p)
             end
         end
         ItemCleanUpOn = true
         local depots = GetUnitsOfTypeIdAll(FourCC('h02W'))
-        ForGroup(depots, function() UnitAddAbilityBJ(FourCC('A0KE'), GetEnumUnit()) end)
+        ForGroup(depots, function() UnitAddAbilityBJ(ABIL.Retrieve, GetEnumUnit()) end)
         DestroyGroup(depots)
     end)
 
     local retrieveT = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(retrieveT, EVENT_PLAYER_UNIT_SPELL_EFFECT)
     TriggerAddCondition(retrieveT, Condition(function()
-        return GetSpellAbilityId() == FourCC('A0KE')
+        return GetSpellAbilityId() == ABIL.Retrieve
     end))
     TriggerAddAction(retrieveT, function()
         local caster = GetSpellAbilityUnit()

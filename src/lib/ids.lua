@@ -52,6 +52,18 @@ UID = {
     PaladinCommander = FourCC('H00C'),  -- L6 miniboss (Meldokk)
     GoblinKing       = FourCC('O001'),  -- L10 boss
     UndeadBehemoth   = FourCC('O004'),  -- L20 boss
+    Tidedweller      = FourCC('O002'),  -- L14 escort boss
+
+    -- Cross-module level/escort actors (referenced from 2+ modules)
+    Caravan          = FourCC('h01A'),  -- L14 escort caravan
+    Prisoner         = FourCC('h006'),  -- L4 prisoner -> militia conversion
+    SquireCaptive    = FourCC('h005'),  -- rescued Squire Captain (web victims)
+    Militia          = FourCC('h045'),  -- Militia of Vern / rescued militia
+
+    -- Hero-class decoy/flair units (excluded from the feat-area sweep; abilities + hero_selection)
+    Decoy1           = FourCC('h03V'),  -- Border Skirmisher / Swashbuckler decoy
+    Decoy2           = FourCC('h03W'),
+    Decoy3           = FourCC('h03X'),  -- "Linna" flair decoy
 }
 
 -- ── Abilities (those referenced by ported systems; extend as heroes are added) ──
@@ -107,6 +119,8 @@ ITEM = {
     SellRare     = FourCC('I0C7'),
     SellEpic     = FourCC('I0C8'),
     SellOther    = FourCC('I0C9'),
+    SwallowAnchor = FourCC('I0C0'),  -- summons the defence ship (items + misc)
+    RadleyTreats  = FourCC('I0BY'),  -- Radley the dog follows the holder (items + misc)
 }
 
 -- ── Research / upgrades ──

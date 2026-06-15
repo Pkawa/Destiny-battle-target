@@ -247,7 +247,7 @@ function BonusesAndUpkeep(levelIndex)
     end
     -- Elven Sharpshooter: survived L1-10 without dying (war3map.j 7377-7382)
     if SharpshooterBonusA and CurrentLevel == 10 then
-        local h02NGroup = GetUnitsOfTypeIdAll(FourCC('H02N'))
+        local h02NGroup = GetUnitsOfTypeIdAll(UID.ElvenSharpshooter)
         local ss = GroupPickRandomUnit(h02NGroup)
         if ss then
             local ssPl = GetOwningPlayer(ss)
@@ -292,7 +292,7 @@ end
 
 -- Level 6 miniboss: Paladin commander H00C (war3map.j 19788-19960)
 local function setupLevel6Boss()
-    local grp = GetUnitsOfTypeIdAll(FourCC('H00C'))
+    local grp = GetUnitsOfTypeIdAll(UID.PaladinCommander)
     ForGroup(grp, function()
         local b = GetEnumUnit()
         SetHeroLevelBJ(b, 5 + DifficultyModifier, false)
@@ -329,7 +329,7 @@ end
 local function setupLevel10Boss()
     StartBossMusic()   -- BossMusic1.mp3 loop (war3map.j 20323-20325)
     GoblinSlayer = true
-    local grp = GetUnitsOfTypeIdAll(FourCC('O001'))
+    local grp = GetUnitsOfTypeIdAll(UID.GoblinKing)
     ForGroup(grp, function()
         local b = GetEnumUnit()
         local lvl = 6 * DifficultyModifier
@@ -365,9 +365,9 @@ local LevelData = {
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h002'), n=6, dm=1,  at=ABC },
-            { u=FourCC('h005'), n=0, dm=1,  at=ABC },
+            { u=UID.SquireCaptive, n=0, dm=1,  at=ABC },
         },
-        victory = { type='clearAll', units={ FourCC('h002'), FourCC('h005') } },
+        victory = { type='clearAll', units={ FourCC('h002'), UID.SquireCaptive } },
     },
     [3] = {
         intro = "|cffff8800Level 3|r — Archers join the assault.",
@@ -375,10 +375,10 @@ local LevelData = {
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h002'), n=4, dm=1,  at=ABC },
-            { u=FourCC('h005'), n=0, dm=1,  at=ABC },
+            { u=UID.SquireCaptive, n=0, dm=1,  at=ABC },
             { u=FourCC('n001'), n=2, dm=1,  at=ABC },
         },
-        victory = { type='clearAll', units={ FourCC('h002'), FourCC('h005'), FourCC('n001') } },
+        victory = { type='clearAll', units={ FourCC('h002'), UID.SquireCaptive, FourCC('n001') } },
     },
     [4] = {
         intro = "|cffff8800Level 4|r — Rescue the prisoners! Clear the attackers.",
@@ -391,17 +391,17 @@ local LevelData = {
         -- Prisoner rescue payoff (war3map.j Level_4_Victory 19513-19575): surviving h006 with
         -- ≥3 HP become militia h045 (who join the Vern patrol); the rest are removed.
         onCleared = function()
-            local g = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h006'))
+            local g = GetUnitsOfPlayerAndTypeId(Player(8), UID.Prisoner)
             ForGroup(g, function()
                 local u = GetEnumUnit()
                 if GetUnitState(u, UNIT_STATE_LIFE) >= 3.0 then
-                    ReplaceUnitBJ(u, FourCC('h045'), bj_UNIT_STATE_METHOD_MAXIMUM)
+                    ReplaceUnitBJ(u, UID.Militia, bj_UNIT_STATE_METHOD_MAXIMUM)
                 else
                     RemoveUnit(u)
                 end
             end)
             DestroyGroup(g)
-            local m = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h045'))
+            local m = GetUnitsOfPlayerAndTypeId(Player(8), UID.Militia)
             ForGroup(m, function()
                 IssuePointOrderLoc(GetEnumUnit(), "patrol", GetRectCenter(rct.VernPatrolB))
             end)
@@ -414,10 +414,10 @@ local LevelData = {
         spawns = {
             { u=UID.SpeedWisp, n=1,        at=ABC },
             { u=FourCC('h002'), n=1, dm=1,  at=ABC },
-            { u=FourCC('h005'), n=0, dm=1,  at=ABC },
+            { u=UID.SquireCaptive, n=0, dm=1,  at=ABC },
             { u=FourCC('h00B'), n=1, dm=1,  at=ABC },
         },
-        victory = { type='clearAll', units={ FourCC('h002'), FourCC('h005'), FourCC('h00B') } },
+        victory = { type='clearAll', units={ FourCC('h002'), UID.SquireCaptive, FourCC('h00B') } },
     },
     [6] = {
         intro = "|cffff3300Level 6 — MINIBOSS!|r A Paladin commander leads the charge.",
@@ -425,13 +425,13 @@ local LevelData = {
         spawns = {
             { u=UID.SpeedWisp, n=1,        at='B' },
             { u=FourCC('h002'), n=9, dm=1,  at='B' },
-            { u=FourCC('h005'), n=5, dm=1,  at='B' },
-            { u=FourCC('H00C'), n=1,        at='B' },   -- the miniboss
+            { u=UID.SquireCaptive, n=5, dm=1,  at='B' },
+            { u=UID.PaladinCommander, n=1,        at='B' },   -- the miniboss
             { u=FourCC('h02P'), n=1,        at='B' },
             { u=FourCC('h02R'), n=1,        at='B' },
             { u=FourCC('h00B'), n=8, dm=1,  at='B' },
         },
-        victory = { type='boss', unit=FourCC('H00C') },
+        victory = { type='boss', unit=UID.PaladinCommander },
     },
     [7] = {
         intro = "|cffff8800Level 7|r — Demons spill from the hell rift.",
@@ -489,9 +489,9 @@ local LevelData = {
             { u=FourCC('h015'), n=2, dm=1,   at='C' },
             { u=FourCC('h02S'), n=1,         at='C' },
             { u=FourCC('h01R'), n=0, dm=1,   at='HellSpawn' },
-            { u=FourCC('O001'), n=1,         at='B' },   -- Goblin King
+            { u=UID.GoblinKing, n=1,         at='B' },   -- Goblin King
         },
-        victory = { type='boss', unit=FourCC('O001') },
+        victory = { type='boss', unit=UID.GoblinKing },
     },
     [11] = {
         intro = "|cffff8800Level 11|r — Heavier demons and infernals.",
@@ -535,11 +535,11 @@ local LevelData = {
             .. "the caravan with the artifact inside to the hermit, then on to the Altar of Tides.",
         track = 1, next = 15, noAutoPatrol = true,
         spawns = {},   -- caravan, camp NPCs, ambushes and waves all come from the setup hook
-        victory = { type='boss', unit=FourCC('O002') },   -- the Tidedweller at the last trap
+        victory = { type='boss', unit=UID.Tidedweller },   -- the Tidedweller at the last trap
         -- Victory payoff (war3map.j 21548-1564): caravan dissolves, the cleansed artifact
         -- I00W drops at the altar approach, chapter-phase fanfare.
         onCleared = function()
-            local g = GetUnitsOfTypeIdAll(FourCC('h01A'))
+            local g = GetUnitsOfTypeIdAll(UID.Caravan)
             ForGroup(g, function() RemoveUnit(GetEnumUnit()) end)
             DestroyGroup(g)
             DisplayTextToForce(GetPlayersAll(), "|cffff0000The Dark Artifact has been cleansed!|r")
@@ -633,10 +633,10 @@ local LevelData = {
             { u=FourCC('h01G'), n=3,  at='B' },
             { u=FourCC('h01H'), n=3,  at='B' },
             { u=FourCC('h01Q'), n=3,  at='B' },
-            { u=FourCC('O004'), n=1,  at='B' },   -- Undead Behemoth
+            { u=UID.UndeadBehemoth, n=1,  at='B' },   -- Undead Behemoth
             { u=FourCC('h04R'), n=1,  at='B' },
         },
-        victory = { type='boss', unit=FourCC('O004') },
+        victory = { type='boss', unit=UID.UndeadBehemoth },
         setup = setupLevel20,
     },
     [21] = {
@@ -889,7 +889,7 @@ end
 -- caravan dying is a hard defeat.
 local function setupLevel14()
     local gen = levelGen
-    local CARAVAN = FourCC('h01A')
+    local CARAVAN = UID.Caravan
 
     -- Trap ambushers, kept locked onto the caravan. The town-harassment waves below re-order
     -- ALL Player-9 units to patrol the base every wave (faithful to war3map.j Spawn_Attack), which
@@ -1070,7 +1070,7 @@ local function setupLevel14()
         fx = AddSpecialEffect("Abilities\\Spells\\Other\\FrostDamage\\FrostDamage.mdl", bx, by)
         TriggerSleepAction(2.0); DestroyEffect(fx); TriggerSleepAction(2.0)
         fx = AddSpecialEffect("Abilities\\Spells\\NightElf\\Blink\\BlinkTarget.mdl", bx, by)
-        local boss = CreateUnit(P9, FourCC('O002'), bx, by, bj_UNIT_FACING)
+        local boss = CreateUnit(P9, UID.Tidedweller, bx, by, bj_UNIT_FACING)
         TriggerSleepAction(2.0); DestroyEffect(fx)
         SetHeroLevelBJ(boss, math.max(1, 4 * DifficultyModifier), false)
         TriggerSleepAction(1.0)
@@ -1082,7 +1082,7 @@ local function setupLevel14()
         TriggerRegisterTimerEventPeriodic(ai1, 10.0)
         TriggerAddAction(ai1, function()
             if levelGen ~= gen then DisableTrigger(ai1); return end
-            local g = GetUnitsOfTypeIdAll(FourCC('O002'))
+            local g = GetUnitsOfTypeIdAll(UID.Tidedweller)
             local b = GroupPickRandomUnit(g)
             DestroyGroup(g)
             if b then IssueImmediateOrderBJ(b, "fanofknives") end
@@ -1091,7 +1091,7 @@ local function setupLevel14()
         TriggerRegisterTimerEventPeriodic(ai2, 14.0)
         TriggerAddAction(ai2, function()
             if levelGen ~= gen then DisableTrigger(ai2); return end
-            local g = GetUnitsOfTypeIdAll(FourCC('O002'))
+            local g = GetUnitsOfTypeIdAll(UID.Tidedweller)
             local b = GroupPickRandomUnit(g)
             DestroyGroup(g)
             if not b then return end
@@ -1131,7 +1131,7 @@ local function setupLevel14()
             ForGroup(g, function()
                 local u = GetEnumUnit()
                 -- Skip the boss AND trap ambushers — the latter stay on the caravan (triage-4 #1).
-                if GetUnitTypeId(u) ~= FourCC('O002') and not ambush[u] then
+                if GetUnitTypeId(u) ~= UID.Tidedweller and not ambush[u] then
                     IssuePointOrderLoc(u, "patrol", GetRectCenter(rct.StartingPlayerArea))
                 end
             end)
@@ -1258,7 +1258,7 @@ end
 local function setupLevel20()
     local gen = levelGen
     -- configure boss
-    local O004 = FourCC('O004')
+    local O004 = UID.UndeadBehemoth
     local grp = GetUnitsOfTypeIdAll(O004)
     ForGroup(grp, function()
         local b = GetEnumUnit()
@@ -1424,8 +1424,8 @@ local function setupLevel28AI()
     -- victim near the killer — a roll of 1-2 frees a hostile monster (Player 9), 3-6 rescues
     -- a friendly captive (Player 8) and rallies the rescued (h045/h04J/h04I) toward safety.
     local WEBBED_VICTIM = {
-        FourCC('h014'), FourCC('h015'), FourCC('h005'),  -- 1-2 hostile, 3 friendly
-        FourCC('h045'), FourCC('h04J'), FourCC('h04I'),  -- 4-6 friendly (rallied on rescue)
+        FourCC('h014'), FourCC('h015'), UID.SquireCaptive,  -- 1-2 hostile, 3 friendly
+        UID.Militia, FourCC('h04J'), FourCC('h04I'),  -- 4-6 friendly (rallied on rescue)
     }
     local webTrg = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(webTrg, EVENT_PLAYER_UNIT_DEATH)
@@ -1520,9 +1520,9 @@ end
 -- Level 4 escort prisoners (h006, Player 8); they flee to the base (flavor).
 local function spawnPrisoners()
     for _, key in ipairs({ 'AlliedFlee', 'AlliedFlee2', 'AlliedFlee3' }) do
-        CreateNUnitsAtLoc(3, FourCC('h006'), Player(8), GetRectCenter(rct[key]), bj_UNIT_FACING)
+        CreateNUnitsAtLoc(3, UID.Prisoner, Player(8), GetRectCenter(rct[key]), bj_UNIT_FACING)
     end
-    local grp = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h006'))
+    local grp = GetUnitsOfPlayerAndTypeId(Player(8), UID.Prisoner)
     ForGroup(grp, function()
         IssuePointOrderLoc(GetEnumUnit(), "move", GetRectCenter(rct.StartingPlayerArea))
     end)
@@ -2007,7 +2007,7 @@ function RegisterLevelTriggers()
     local nudge = CreateTrigger()
     TriggerRegisterTimerEventPeriodic(nudge, 10.0)
     TriggerAddAction(nudge, function()
-        local g = GetUnitsOfPlayerAndTypeId(Player(8), FourCC('h006'))
+        local g = GetUnitsOfPlayerAndTypeId(Player(8), UID.Prisoner)
         ForGroup(g, function()
             IssuePointOrderLoc(GetEnumUnit(), "move", GetRectCenter(rct.StartingPlayerArea))
         end)
@@ -2019,7 +2019,7 @@ function RegisterLevelTriggers()
     local cantKill = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(cantKill, EVENT_PLAYER_UNIT_ATTACKED)
     TriggerAddCondition(cantKill, Condition(function()
-        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('h006')
+        return GetUnitTypeId(GetAttackedUnitBJ()) == UID.Prisoner
             and GetOwningPlayer(GetAttacker()) ~= P9
     end))
     TriggerAddAction(cantKill, function()
@@ -2042,7 +2042,7 @@ function RegisterLevelTriggers()
     local dies = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(dies, EVENT_PLAYER_UNIT_DEATH)
     TriggerAddCondition(dies, Condition(function()
-        return GetUnitTypeId(GetDyingUnit()) == FourCC('h006')
+        return GetUnitTypeId(GetDyingUnit()) == UID.Prisoner
     end))
     TriggerAddAction(dies, function()
         PlaySoundBJ(snd.CreepAggroWhat1)

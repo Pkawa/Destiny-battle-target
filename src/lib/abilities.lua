@@ -11,7 +11,7 @@ local P8 = Player(8)
 -- scaling earth elemental (capped at 8 except the top rank). Seismic Collapse (cast A020): a
 -- map-wide earthquake — debris (u002) rains everywhere, each chunk dealing 500 to nearby enemies.
 
-local EARTHEN_TEMPLAR = FourCC('H00S')
+local EARTHEN_TEMPLAR = UID.EarthenTemplar
 local DEBRIS = FourCC('u002')
 local EP = {  -- [rank] = { elemental, proc chance (out of 50), cooldown, cap (nil = uncapped) }
     [1] = { elem = FourCC('h011'), chance = 2, cd = 15.0, cap = 8 },
@@ -167,7 +167,7 @@ local function setupEngineer()
     -- Limited Buildings: an Engineer-owning player who exceeds the cap loses the new structure.
     OnAnyUnit(EVENT_PLAYER_UNIT_CONSTRUCT_START, function()
         local p = GetOwningPlayer(GetConstructingStructure())
-        local eng = GetUnitsOfPlayerAndTypeId(p, FourCC('H00F'))
+        local eng = GetUnitsOfPlayerAndTypeId(p, UID.HumanEngineer)
         local isEng = CountUnitsInGroup(eng) >= 1
         DestroyGroup(eng)
         if not isEng then return false end
@@ -206,7 +206,7 @@ end
 
 local function setupArcaneArcher()
     OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
-        return GetLearnedSkillBJ() == FourCC('A03J')
+        return GetLearnedSkillBJ() == ABIL.FarShot
     end, function()
         local archer = GetLearningUnit()
         FarShotTotal = FarShotTotal + 1
@@ -224,7 +224,7 @@ end
 -- ISOLATED (≤1 living enemy within 400). Dagger in the Dark (A0JI): refill stacks + reset
 -- Murder's cooldown. Blind (A00Q): the e01A dummy paints a fog cloud at the target point.
 
-local ROGUE = FourCC('E001')
+local ROGUE = UID.RogueOfTheDark
 
 local function setupRogue()
     local stacksT, attackT
@@ -464,7 +464,7 @@ end
 -- Assault (learn A03Q): the brother banks every kill (KillsForAxeBrother); a small chance per
 -- attack discharges them all as KillsForAxeBrother × 15/rank bonus damage.
 
-local AXE_BROTHER = FourCC('E006')
+local AXE_BROTHER = UID.AxeBrother
 local DECIMATE_BLOOD = "Objects\\Spawnmodels\\NightElf\\NightElfBlood\\NightElfBloodHippogryph.mdl"
 local FANG_BURST = { 20, 40, 60, 100 }   -- [rank] = Decimate chance added during the window
 
@@ -575,7 +575,7 @@ end
 -- marked, they collect a gold bounty (+20/rank). Shock Arrows (learn A07R): every attack lands a
 -- small terrain-rippling AoE burst (60+40+20 = 120 split over two radii) — armed once learned.
 
-local SHARPSHOOTER = FourCC('H02N')
+local SHARPSHOOTER = UID.ElvenSharpshooter
 
 local function setupSharpshooter()
     -- Sniper's Mark Learn (A07O, real unit only): +20 gold bounty per rank; remember the sniper.
@@ -945,7 +945,7 @@ local function setupHorizonWanderer()
         end
     end
 
-    local function isWandererAttacker() return GetUnitTypeId(GetAttacker()) == FourCC('E011') end
+    local function isWandererAttacker() return GetUnitTypeId(GetAttacker()) == UID.HorizonWanderer end
     local lv1T = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, isWandererAttacker,
         travelProc(function() return 0 end, false, "faeriefire"))
     local lv2T = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, isWandererAttacker,
@@ -1096,7 +1096,7 @@ end
 -- (A02P): smites a fixed roster of unholy enemy types for 300. Angel SFX: gives any spawned angel
 -- guardian (h01K) a translucent holy glow.
 
-local PALADIN = FourCC('H01J')
+local PALADIN = UID.PaladinOfJustice
 local ANGEL_GUARDIAN = FourCC('h01K')
 -- Lay on Hands: heal = caster's current life / divisor[rank] (war3map.j 45248-45298).
 local LOH_DIVISOR = { 5.0, 2.5, 1.67, 1.25, 1.25 }
@@ -1121,14 +1121,14 @@ end
 local function setupPaladin()
     -- LoH Learn (A02M): +1 rank (raises the heal fraction).
     OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
-        return GetLearnedSkillBJ() == FourCC('A02M')
+        return GetLearnedSkillBJ() == ABIL.LayOnHands
     end, function()
         LayOnHands = LayOnHands + 1
     end)
 
     -- Lay on Hands (cast A02M): heal the target for a fraction of the Paladin's own current life.
     OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
-        return GetSpellAbilityId() == FourCC('A02M')
+        return GetSpellAbilityId() == ABIL.LayOnHands
     end, function()
         local div = LOH_DIVISOR[LayOnHands]
         if not div then return end
@@ -1240,7 +1240,7 @@ local function setupRockfighter()
     -- other non-caravan enemy) marching back at the base. IntimShoutGroup is persistent (the
     -- original never clears it — faithful).
     OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
-        return GetSpellAbilityId() == FourCC('A035')
+        return GetSpellAbilityId() == ABIL.IntimidatingShout
     end, function()
         local caster = GetSpellAbilityUnit()
         local radius = 55.0 * GetHeroLevel(caster)
@@ -1265,7 +1265,7 @@ local function setupRockfighter()
             RemoveLocation(loc)
         end)
         local g = GetUnitsOfPlayerMatching(P9, Condition(function()
-            return GetUnitTypeId(GetFilterUnit()) ~= FourCC('h01A')
+            return GetUnitTypeId(GetFilterUnit()) ~= UID.Caravan
         end))
         ForGroup(g, function()
             IssuePointOrder(GetEnumUnit(), "patrol",
@@ -1443,7 +1443,7 @@ local function setupTundraBarbarian()
 
     -- Blood Feast Kill (a H03A kills something): blood splatter + heal him BloodFeast% max HP.
     local bloodFeastT = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
-        return GetUnitTypeId(GetKillingUnit()) == FourCC('H03A')
+        return GetUnitTypeId(GetKillingUnit()) == UID.TundraBarbarian
     end, function()
         DestroyEffect(AddSpecialEffectTarget(
             "Objects\\Spawnmodels\\Other\\HumanBloodCinematicEffect\\HumanBloodCinematicEffect.mdl",
@@ -1477,7 +1477,7 @@ local function setupWarGuard()
     local aidEffT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
         return GetAttackedUnitBJ() == AidAnother
     end, function()
-        local g = GetUnitsOfTypeIdAll(FourCC('H02X'))
+        local g = GetUnitsOfTypeIdAll(UID.WarGuard)
         local wg = GroupPickRandomUnit(g)
         DestroyGroup(g)
         if wg then IssueTargetOrder(GetAttacker(), "attack", wg) end
@@ -1661,7 +1661,7 @@ end
 -- 10s. Phantasm (A0CH): her o00B phantasms cripple whatever they attack (via the E018 dummy's
 -- I073 item), get a Cripple glow on spawn, and illusions spawned under Player(11) transfer to her.
 
-local ILLUSIONIST = FourCC('H03I')
+local ILLUSIONIST = UID.Illusionist
 local PHANTASM = FourCC('o00B')
 
 local function blurIllusionists()
@@ -1750,7 +1750,7 @@ end
 -- skims bonus gold whenever the team is awarded any. Dramlor's Guarantee (ult A0C8): learning it
 -- drops guaranteed artifacts at her feet.
 
-local SWASHBUCKLER = FourCC('E015')
+local SWASHBUCKLER = UID.Swashbuckler
 -- Dagger Toss damage by rank (JASS DaggerTossTotalDmg[1..5]).
 local DAGGER_TOSS_DMG = { 25.0, 50.0, 100.0, 150.0, 200.0 }
 
@@ -1800,7 +1800,7 @@ local function setupSwashbuckler()
         local hero = GetLearningUnit()
         DerringDoChance = DerringDoChance + 10
         EnableTrigger(derringKillT)
-        CreateUnit(GetOwningPlayer(hero), FourCC('h03X'), GetUnitX(hero), GetUnitY(hero), bj_UNIT_FACING)
+        CreateUnit(GetOwningPlayer(hero), UID.Decoy3, GetUnitX(hero), GetUnitY(hero), bj_UNIT_FACING)
     end)
 
     -- Opportunist Gain (no event — fired from BonusesAndUpkeep's award helpers via trg_Opportunist_Gain):
@@ -1843,21 +1843,21 @@ end
 -- a passive that revives any allied hero that dies near a living Cleric of Elven Word, at base, at
 -- 10% HP/mana, then goes on cooldown.
 
-local CLERIC_ELVENWORD = FourCC('H02C')
+local CLERIC_ELVENWORD = UID.ClericElvenWord
 -- Replenish flat heal by rank (JASS ReplenishLevel[1..5]).
 local REPLENISH_HEAL = { 60.0, 100.0, 160.0, 250.0, 325.0 }
 
 local function setupClericOfElvenWord()
     -- Replenish Learn (A05D): +1 rank (heal tier).
     OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
-        return GetLearnedSkillBJ() == FourCC('A05D')
+        return GetLearnedSkillBJ() == ABIL.Regrowth
     end, function()
         ReplenishLearn = ReplenishLearn + 1
     end)
 
     -- Replenish (cast A05D): "*Replenish!*" text tag + heal the target by the rank's flat amount.
     OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
-        return GetSpellAbilityId() == FourCC('A05D')
+        return GetSpellAbilityId() == ABIL.Regrowth
     end, function()
         local t = GetSpellTargetUnit()
         local heal = REPLENISH_HEAL[ReplenishLearn]
@@ -1910,7 +1910,7 @@ local function setupClericOfOrder()
     -- Symbol of Order (cast A001): a cosmetic "Physical Immunity!" text tag on the target
     -- (TRIGSTR_2398 — the buff grants physical immunity; war3map.j 38592).
     OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
-        return GetSpellAbilityId() == FourCC('A001')
+        return GetSpellAbilityId() == ABIL.MarkOfOrder
     end, function()
         local t = GetSpellTargetUnit()
         if t then FloatText(t, "Physical Immunity!", 100, 100, 0, 3.0) end
@@ -2024,7 +2024,7 @@ end
 -- (3) drop a random epic at the cleric; (4) +500 gold; (5) +400 XP; (6) 8 reinforcements for 120s;
 -- (7) drain all enemy mana + the cleric is superpowered (+100 all stats) for 30s.
 
-local CLERIC_SMALLFOLK = FourCC('H003')
+local CLERIC_SMALLFOLK = UID.ClericSmallFolk
 
 local function setupClericOfTheSmallFolk()
     -- Flip a Coin Learn (A009): remember which unit is the Cleric of the Small Folk.
@@ -2111,7 +2111,7 @@ end
 -- mana). Mastery of Grace (A03C): boosts all three + enables the Mass Res. Mistress of Grace Mass
 -- Res (A039): +20 mana to every allied unit within 1400 of the caster.
 
-local DISCIPLE = FourCC('H01N')
+local DISCIPLE = UID.DiscipleOfGrace
 local SANCTUARY_SFX = "Abilities\\Spells\\Orc\\Purge\\PurgeBuffTarget.mdl"
 
 local function setupDiscipleOfGrace()
@@ -2211,7 +2211,7 @@ local function setupDiscipleOfGrace()
     -- Mistress of Grace Mass Res (cast A039, gated): +20 mana to every allied (non-P9) unit
     -- within 1400 of the caster.
     local massResT = OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_CAST, function()
-        return GetSpellAbilityId() == FourCC('A039')
+        return GetSpellAbilityId() == ABIL.MoonbeamRejuv
     end, function()
         local caster = GetSpellAbilityUnit()
         ForUnitsInRange(GetUnitX(caster), GetUnitY(caster), 1400.0, function()
@@ -2240,7 +2240,7 @@ end
 -- rank-scaling fraction of max HP, run a visible ~25s countdown, then pay a rank-scaling self-damage
 -- cost at the end. The buff itself (the protected window) is the ability's object data.
 
-local AXEMASTER = FourCC('H007')
+local AXEMASTER = UID.DwarvenAxeMaster
 -- Last Stand by rank → { heal fraction of max HP, end-of-countdown self-damage fraction }
 -- (war3map.j 39753/39880, 39888/40013, ... — divisors 4/2.5/1.66/1.25 heal, 10/6.5/5/4 cost).
 local LAST_STAND = {
@@ -2318,8 +2318,8 @@ end
 
 -- Decoy's Retinue: rank → the decoy unit types refreshed (JASS 37984-38002).
 local DECOY_RETINUE = {
-    [1] = { FourCC('h03V'), FourCC('h03X'), FourCC('h03W') },
-    [2] = { FourCC('h03V'), FourCC('h03X'), FourCC('h03W'), FourCC('h04P') },
+    [1] = { UID.Decoy1, UID.Decoy3, UID.Decoy2 },
+    [2] = { UID.Decoy1, UID.Decoy3, UID.Decoy2, FourCC('h04P') },
 }
 
 local function setupBorderSkirmisher()
@@ -2506,14 +2506,14 @@ local SALA_FIRE_FX = "Abilities\\Weapons\\FireBallMissile\\FireBallMissile.mdl"
 local function setupCrestedDrake()
     -- Flame Wreath Learn (A05F): +50 burn damage per rank.
     OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
-        return GetLearnedSkillBJ() == FourCC('A05F')
+        return GetLearnedSkillBJ() == ABIL.FlameWreath
     end, function()
         FlameWreathDamage = FlameWreathDamage + 50
     end)
 
     -- Flame Wreath (effect A05F): 1s after cast, burn the target for FlameWreathDamage.
     OnAnyUnit(EVENT_PLAYER_UNIT_SPELL_EFFECT, function()
-        return GetSpellAbilityId() == FourCC('A05F')
+        return GetSpellAbilityId() == ABIL.FlameWreath
     end, function()
         local caster, target = GetSpellAbilityUnit(), GetSpellTargetUnit()
         TriggerSleepAction(1.0)
@@ -2523,7 +2523,7 @@ local function setupCrestedDrake()
 
     -- Drake Fang Learn (A05H): one-time — unlock the A05M ability, then disarm.
     OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
-        return GetLearnedSkillBJ() == FourCC('A05H')
+        return GetLearnedSkillBJ() == ABIL.Drakefang
     end, function()
         DisableTrigger(GetTriggeringTrigger())
         UnitAddAbility(GetLearningUnit(), FourCC('A05M'))
@@ -2634,7 +2634,7 @@ end
 -- target-effect with three rank-gated outcomes (capture a creep, stasis-shield an ally, or freeze
 -- an enemy hero). Ignius Pyre (A0I4): a cosmetic eruption on every enemy near the caster.
 
-local TRUEBORN = FourCC('H041')
+local TRUEBORN = UID.DwarvenTrueborn
 local LAVA_FIREBALL = FourCC('e01F')
 local LORD_OF_FLAME_FX = "Abilities\\Weapons\\LordofFlameMissile\\LordofFlameMissile.mdl"
 local PYRE_FX = "Objects\\Spawnmodels\\Other\\NeutralBuildingExplosion\\NeutralBuildingExplosion.mdl"
@@ -2770,7 +2770,7 @@ end
 -- target is another Runner, heals 50% instead). Birth of Thorns (A0A8): summons a thornbush that
 -- repeatedly casts fan-of-knives for 30s.
 
-local RUNNER = FourCC('H02U')
+local RUNNER = UID.WildernessRunner
 local ROOT_TRAP = FourCC('h02Y')          -- the placed trap unit (triggers on being attacked)
 local THORNBUSH = FourCC('h033')
 local TIMED_LIFE = FourCC('BTLF')         -- generic timed-life buff used by the spawned units
@@ -3049,7 +3049,7 @@ local function setupMonk()
 
     -- Crescendo of Blows: armed once learned; counts E000's attacks and bursts on the Nth.
     local blowsT = OnAnyUnit(EVENT_PLAYER_UNIT_ATTACKED, function()
-        return GetUnitTypeId(GetAttacker()) == FourCC('E000')
+        return GetUnitTypeId(GetAttacker()) == UID.MonkEbonyFist
     end, function()
         CrescendoCurrentAttacks = CrescendoCurrentAttacks + 1
         if CrescendoCurrentAttacks < CrescendoMaxAttacks then return end
@@ -3091,7 +3091,7 @@ end
 --   Meteor Storm (A0E4): a channel that rains meteors (o00J) + impact zones (e01D) around her,
 --     draining MeteorStormManaDrain mana/s until she stops or runs dry.
 
-local PYRO         = FourCC('E00E')
+local PYRO         = UID.RecklessPyromancer
 local BLOOM        = FourCC('o00E')   -- homing fire-bloom projectile
 local FLOWER_SEED  = FourCC('o00D')   -- the attacking fire-flower
 local ABSORB_ORB   = FourCC('o00I')   -- absorbed-heat orb

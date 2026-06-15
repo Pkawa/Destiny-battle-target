@@ -22,9 +22,9 @@ end
 -- a skill during the (paused) selection phase, dragging the flair unit into feats (the "Linna
 -- The Pretty One" report). Source units: Swashbuckler Derring-Do flair / Border Skirmisher decoys.
 local NON_PLAYER_HEROES = {
-    [FourCC('h03X')] = true,  -- Linna "The Pretty One" (Derring-Do flair + Skirmisher decoy)
-    [FourCC('h03V')] = true,  -- Border Skirmisher decoy
-    [FourCC('h03W')] = true,  -- Border Skirmisher decoy
+    [UID.Decoy3] = true,  -- Linna "The Pretty One" (Derring-Do flair + Skirmisher decoy)
+    [UID.Decoy1] = true,  -- Border Skirmisher decoy
+    [UID.Decoy2] = true,  -- Border Skirmisher decoy
     [FourCC('h04P')] = true,  -- Border Skirmisher decoy (rank 2)
 }
 
@@ -58,7 +58,7 @@ end
 
 -- Spawn NPC blue-player hero (H04Y) for story/battle/solo modes
 local function SpawnBlueCompanion()
-    Heroes[2] = CreateUnit(Player(1), FourCC('H04Y'),
+    Heroes[2] = CreateUnit(Player(1), UID.Companion,
         GetRectCenterX(rct.VernPatrolA), GetRectCenterY(rct.VernPatrolA), bj_UNIT_FACING)
     AdjustPlayerStateBJ(325, Player(1), PLAYER_STATE_RESOURCE_GOLD)
     RegisterCompanionAI()  -- patrol circuit + heal/defend behaviors (lib/companion.lua)
@@ -391,7 +391,7 @@ end
 
 function GiveWildbondPet()
     -- Only if exactly one Wildbond hero exists
-    local grp = GetUnitsOfTypeIdAll(FourCC('H03J'))
+    local grp = GetUnitsOfTypeIdAll(UID.Wildbond)
     if CountUnitsInGroup(grp) ~= 1 then
         DestroyGroup(grp)
         return

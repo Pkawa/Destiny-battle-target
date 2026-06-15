@@ -18,7 +18,7 @@ local function lifePct(u)
 end
 
 local function companionGroup()
-    return GetUnitsOfPlayerAndTypeId(P1, FourCC('H04Y'))
+    return GetUnitsOfPlayerAndTypeId(P1, UID.Companion)
 end
 
 local function orderCompanion(order, rect)
@@ -98,7 +98,7 @@ function RegisterCompanionResearchAI()
         { 750, function(b) if b then IssueUpgradeOrderByIdBJ(b, FourCC('R00H')) end
                            joshuaSays("I am researching Energy Rush!") end },
         -- Basic_AI_Research_9      (>=500)  R00J Supply Stocking
-        { 500, function(b) if b then IssueUpgradeOrderByIdBJ(b, FourCC('R00J')) end
+        { 500, function(b) if b then IssueUpgradeOrderByIdBJ(b, RES.SupplyStocking) end
                            joshuaSays("I am researching Supply Stocking!") end },
         -- Basic_AI_Research_10     (>=250)  R00Y Sea Faring (last rung, no successor)
         { 250, function(b) if b then IssueUpgradeOrderByIdBJ(b, FourCC('R00Y')) end
@@ -140,7 +140,7 @@ function RegisterCompanionAI()
         local t = CreateTrigger()
         TriggerRegisterEnterRectSimple(t, fromRect)
         TriggerAddCondition(t, Condition(function()
-            return GetUnitTypeId(GetEnteringUnit()) == FourCC('H04Y')
+            return GetUnitTypeId(GetEnteringUnit()) == UID.Companion
         end))
         TriggerAddAction(t, function()
             IssuePointOrderLoc(GetEnteringUnit(), "patrol", GetRectCenter(toRect))
@@ -167,7 +167,7 @@ function RegisterCompanionAI()
     TriggerRegisterPlayerUnitEventSimple(hs, P1, EVENT_PLAYER_UNIT_ATTACKED)
     TriggerAddCondition(hs, Condition(function()
         local u = GetAttackedUnitBJ()
-        return GetUnitTypeId(u) == FourCC('H04Y') and lifePct(u) <= 75.0
+        return GetUnitTypeId(u) == UID.Companion and lifePct(u) <= 75.0
     end))
     TriggerAddAction(hs, function()
         DisableTrigger(hs)
@@ -221,7 +221,7 @@ function RegisterCompanionAI()
     local gh = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(gh, EVENT_PLAYER_UNIT_ATTACKED)
     TriggerAddCondition(gh, Condition(function()
-        return GetUnitTypeId(GetAttackedUnitBJ()) == FourCC('H04Y')
+        return GetUnitTypeId(GetAttackedUnitBJ()) == UID.Companion
             and Heroes[2] ~= nil and lifePct(Heroes[2]) <= 20.0
     end))
     TriggerAddAction(gh, function()
@@ -263,7 +263,7 @@ function RegisterCompanionAI()
     local rm = CreateTrigger()
     TriggerRegisterAnyUnitEventBJ(rm, EVENT_PLAYER_UNIT_PICKUP_ITEM)
     TriggerAddCondition(rm, Condition(function()
-        return GetUnitTypeId(GetManipulatingUnit()) == FourCC('H04Y')
+        return GetUnitTypeId(GetManipulatingUnit()) == UID.Companion
             and DISCARD[GetItemTypeId(GetManipulatedItem())] == true
     end))
     TriggerAddAction(rm, function()

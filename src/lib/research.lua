@@ -187,7 +187,7 @@ registerResearch('R00W', " has researched Militia of Vern! (Militia appear at de
             return IsUnitType(d, UNIT_TYPE_STRUCTURE) and GetUnitTypeId(d) ~= FourCC('h000')
         end, function()
             local d = GetDyingUnit()
-            CreateNUnitsAtLoc(GetRandomInt(1, 3), FourCC('h045'), Player(8),
+            CreateNUnitsAtLoc(GetRandomInt(1, 3), UID.Militia, Player(8),
                 GetUnitLoc(d), bj_UNIT_FACING)
         end)
     end)
