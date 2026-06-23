@@ -314,12 +314,11 @@ HealingSongRanks  = {}; TangoTenacityRanks = {}; OdeToWarRanks = {}
 SymphonyOfFlameRanks = {}; MovementMarchRanks = {}; SymphonyOfStormRanks = {}
 SongOfManaRanks   = {}; HymnOfFrostRanks = {}
 
--- Guard post
+-- Guard post (war3map.j InitGlobals 2706/2710: melee=h04Z City Guard, ranged=n00Z City Archer).
+-- Bugfix: a stray re-init reset these to 0 right after setting them, so guards spawned as null.
+-- (GuardPost*Built / *Location coords now live as module-locals in buildings.lua.)
 GuardPostMeleeType  = FourCC('h04Z')
 GuardPostRangedType = FourCC('n00Z')
-GuardPostABuilt = false; GuardPostBBuilt = false; GuardPostCBuilt = false
-GuardPostLocationA = nil; GuardPostLocationB = nil; GuardPostLocationC = nil
-GuardPostMeleeType = 0; GuardPostRangedType = 0
 
 -- Miscellaneous
 HeroWithBlackweave      = nil
@@ -335,7 +334,12 @@ PlantHater              = false
 GoblinSlayer            = false
 WageTotal               = 0
 HiredWages              = 0
+HiredWagesPlayer        = nil   -- Man-at-Arms owner (set when Hired Wages A026 is learned)
+HiredWagesUnit          = nil   -- the Man-at-Arms hero (Battle-Exp XP floater target)
 BattleEXPRank           = 0
+BattleEXPPlayer         = nil
+BattleEXPUnit           = nil
+BattleExpBonus          = 0
 Aggression              = 0
 Locksmithing            = 0
 SabotageOn              = false  -- Border Skirmisher: Sabotage difficulty reduction active this level

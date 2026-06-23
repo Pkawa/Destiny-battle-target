@@ -3077,6 +3077,67 @@ local function setupMonk()
     end)
 end
 
+-- ══ Man-at-Arms (H013, Boyd Axer) — war3map.j 44797-45108 ════════════════════════
+-- Two "research"-style passive skills the player learns on level-up:
+--   Battle Experience (A027): each rank grants escalating bonus XP whenever Boyd lands a kill
+--     (one of four kill-XP tiers active at a time, swapped up by rank).
+--   Hired Wages (A026): each rank bumps the wage tier paid out at level-end — the payout itself
+--     already lives in levels.lua BonusesAndUpkeep (war3map.j Hired_Wages_Lv_N 45015-45108),
+--     it just needs HiredWages/HiredWagesPlayer set here.
+-- (This class was selectable from the hero pool but its kit was unported — its skills did nothing.)
+local BATTLE_EXP_RANGES = { {25, 50}, {35, 70}, {50, 100}, {75, 150} }  -- per-rank XP roll
+
+local function setupManAtArms()
+    -- Kill-XP tiers (Battle_Exp_LV_1..4). All start disabled; the learn handler enables one
+    -- and disables the previous, so exactly one is live = the JASS enable/disable chain.
+    local expTiers = {}
+    for rank = 1, 4 do
+        local lo, hi = BATTLE_EXP_RANGES[rank][1], BATTLE_EXP_RANGES[rank][2]
+        local t
+        t = OnAnyUnit(EVENT_PLAYER_UNIT_DEATH, function()
+            local k = GetKillingUnit()
+            return k ~= nil and GetOwningPlayer(k) == BattleEXPPlayer
+        end, function()
+            DisableTrigger(t)                       -- ~1s throttle (self-disable + sleep)
+            BattleExpBonus = GetRandomInt(lo, hi)
+            local who = HiredWagesUnit or BattleEXPUnit  -- floater target (crash-safe fallback)
+            if who and GetUnitTypeId(who) ~= 0 then
+                FloatText(who, "+" .. BattleExpBonus .. " EXP", 0, 100, 100, 1.0)
+            end
+            local g = GetUnitsOfPlayerAll(BattleEXPPlayer)
+            local hero = GroupPickRandomUnit(g)
+            DestroyGroup(g)
+            if hero then AddHeroXP(hero, BattleExpBonus, true) end
+            TriggerSleepAction(1.0)
+            EnableTrigger(t)
+        end)
+        DisableTrigger(t)
+        expTiers[rank] = t
+    end
+
+    -- Battle Experience learn (A027): bump rank, swap to the new XP tier (war3map.j 44804).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A027')
+    end, function()
+        BattleEXPPlayer = GetOwningPlayer(GetLearningUnit())
+        BattleEXPUnit   = GetLearningUnit()
+        BattleEXPRank   = BattleEXPRank + 1
+        if BattleEXPRank > 1 and expTiers[BattleEXPRank - 1] then
+            DisableTrigger(expTiers[BattleEXPRank - 1])
+        end
+        if expTiers[BattleEXPRank] then EnableTrigger(expTiers[BattleEXPRank]) end
+    end)
+
+    -- Hired Wages learn (A026): bump the wage tier (paid by levels.lua BonusesAndUpkeep, war3map.j 44804).
+    OnAnyUnit(EVENT_PLAYER_HERO_SKILL, function()
+        return GetLearnedSkillBJ() == FourCC('A026')
+    end, function()
+        HiredWagesPlayer = GetOwningPlayer(GetLearningUnit())
+        HiredWagesUnit   = GetLearningUnit()
+        HiredWages       = HiredWages + 1
+    end)
+end
+
 -- ══ Reckless Pyromancer (E00E) — war3map.j 47453-48605 ════════════════════════════
 -- The largest hero kit. Everything keys off "the Pyromancer" (the JASS picks a random living E00E —
 -- a single-caster assumption we keep). Four abilities:
@@ -3535,5 +3596,6 @@ function RegisterAbilityTriggers()
     setupWildernessRunner()
     setupHalfElvenBard()
     setupMonk()
+    setupManAtArms()
     setupRecklessPyromancer()
 end

@@ -300,6 +300,9 @@ function StartEnergyRegeneration()
     if energyRegenStarted then return end
     energyRegenStarted = true
     local t = CreateTrigger()   -- periodic trigger, not a timer: the action sleeps mid-way
+    -- Exposed so W22 Heat Wave (weather.lua) can DisableTrigger it for 90s, exactly as the
+    -- JASS does (war3map.j Weather_22_Heat_Wave 30924 toggles gg_trg_Energy_Regeneration).
+    trg_EnergyRegeneration = t
     TriggerRegisterTimerEventPeriodic(t, 3.0)
     TriggerAddAction(t, function()
         ForForce(GetPlayersAll(), function()
@@ -487,6 +490,42 @@ local function registerSwallowAnchor()
     end)
 end
 
+-- Friendly-fire guards + NPC death flavor (war3map.j 29385-29431, 29983-29997).
+-- Players must NOT be able to kill the Princess Silmeria (`H02G`) or the escort Caravan
+-- (`h01A`): if any non-Player(9) unit attacks either, it's immediately ordered to "stop".
+-- The Flower/Herb Seller (`n00H`) death just plays a flavor line + minimap ping.
+local function registerProtectedUnits()
+    -- Cant_Kill_Princess (29385): the Princess's own attacked event; halt any non-enemy attacker.
+    if unit_H02G then
+        local t = CreateTrigger()
+        TriggerRegisterUnitEvent(t, unit_H02G, EVENT_UNIT_ATTACKED)
+        TriggerAddCondition(t, Condition(function()
+            return GetOwningPlayer(GetAttacker()) ~= Player(9)
+        end))
+        TriggerAddAction(t, function() IssueImmediateOrderBJ(GetAttacker(), "stop") end)
+    end
+
+    -- Cant_Break_Caravan (29408): any `h01A` caravan attacked by a non-enemy → stop the attacker.
+    local cb = CreateTrigger()
+    TriggerRegisterAnyUnitEventBJ(cb, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(cb, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == UID.Caravan
+            and GetOwningPlayer(GetAttacker()) ~= Player(9)
+    end))
+    TriggerAddAction(cb, function() IssueImmediateOrderBJ(GetAttacker(), "stop") end)
+
+    -- Herb_Seller_Dies (29983): flavor — aggro cry + ping + "The Flower Seller has DIED!!".
+    if unit_n00H then
+        local hd = CreateTrigger()
+        TriggerRegisterUnitEvent(hd, unit_n00H, EVENT_UNIT_DEATH)
+        TriggerAddAction(hd, function()
+            PlaySoundBJ(snd.CreepAggroWhat1)
+            PingMinimap(GetUnitX(GetDyingUnit()), GetUnitY(GetDyingUnit()), 5.0)
+            DisplayTextToForce(GetPlayersAll(), "|cff32cd32The Flower Seller has DIED!!|r")
+        end)
+    end
+end
+
 function RegisterMiscTriggers()
     registerLevelUpFloaters()
     RegisterHeroDeathCries()
@@ -496,4 +535,5 @@ function RegisterMiscTriggers()
     registerMercenaryDisembark()
     registerRadley()
     registerSwallowAnchor()
+    registerProtectedUnits()
 end

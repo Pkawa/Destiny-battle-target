@@ -91,11 +91,17 @@ W[20].mechEffect = function()
     end
 end
 
--- W22 Heat Wave: disables Energy Regeneration for 90s.
--- (EnergyRegeneration system not yet ported — effect noted, no-op for now.)
+-- W22 Heat Wave: disables Energy Regeneration for 90s (war3map.j 30924-30929 — the JASS
+-- DisableTriggers gg_trg_Energy_Regeneration, sleeps 90s, EnableTriggers it). misc.lua's
+-- StartEnergyRegeneration now exposes its periodic trigger as trg_EnergyRegeneration, so we
+-- can pause/resume it the same way. Guarded in case regen hasn't started (pre-gameplay).
 W[22].mechEffect = function()
     DisplayTimedTextToForce(GetPlayersAll(), 8.0,
         "|cffff4400Heat Wave: Energy regeneration halted for 90 seconds!|r")
+    if trg_EnergyRegeneration then DisableTrigger(trg_EnergyRegeneration) end
+    After(90.0, function()
+        if trg_EnergyRegeneration then EnableTrigger(trg_EnergyRegeneration) end
+    end)
 end
 
 -- W23 Blizzard: spawn blizzard unit (e00F) at WeatherTarget for 90s.

@@ -113,6 +113,10 @@ RegisterAuctionHouseTriggers()
 -- Seafaring; researched at the per-player h00Z buildings — progression/Training.md)
 RegisterResearchTriggers()
 
+-- Register buildable town structures + guard posts + Magister's Tower auto-cast + Artificer
+-- loot (one SELL_ITEM dispatch; guards respawn per level — buildings/Buildings.md)
+RegisterBuildingTriggers()
+
 -- Register circle-scroll spell learning (use scroll -> learn spell, one at a time)
 RegisterScrollTriggers()
 

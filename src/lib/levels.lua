@@ -42,7 +42,9 @@ function ThingsToDoBeforeEveryLevelBegins()
     end
     for i = 1, 8 do revive(Heroes[i]) end
     revive(WildbondPet)
-    -- SpawnMeleeGuards()/SpawnArcherGuards() — guard-post system, port later
+    -- (Re)station the player-built garrison for this level (no-op until a guard post is built).
+    SpawnMeleeGuards()   -- buildings.lua (war3map.j Spawn_Melee_Guards 9905)
+    SpawnArcherGuards()  -- buildings.lua (war3map.j Spawn_Archer_Guards 9966)
     DieHardActivated = false
 end
 
@@ -286,6 +288,11 @@ function BonusesAndUpkeep(levelIndex)
     -- Per-level d10 roll; the first success arms the one-shot cursed drop. Self-guards
     -- once CursedItemOn is false, so it's safe to call every level (items.lua).
     CursedItemRoll()
+
+    -- ── Companionship (war3map.j 7390 + 7406: Check_Companionships + Companionship_Checking) ──
+    -- Proximity-bond flavor tally + bond announcement (half-finished in the original; no
+    -- stat buff). Faithful port lives in buildings.lua. Buildings.md §4.
+    CheckCompanionships()
 end
 
 -- ─── Per-level setup hooks (boss stats/skills + enemy AI) ──────────────────────
@@ -303,12 +310,30 @@ local function setupLevel6Boss()
     DestroyGroup(grp)
 
     -- heal self when attacked below 125 HP; divine shield when below 500 HP
+    -- (Ai/Ai2 self-deactivate once H00C is removed at victory — the predicate stops matching.)
     onAttackedTypeAI('H00C',
         function(u) return GetUnitState(u, UNIT_STATE_LIFE) <= 125.0 end,
         function(b) IssueTargetOrderBJ(b, "healingwave", b) end)
     onAttackedTypeAI('H00C',
         function(u) return GetUnitState(u, UNIT_STATE_LIFE) <= 500.0 end,
         function(b) IssueImmediateOrderBJ(b, "divineshield") end)
+
+    -- Boss Ai3 (war3map.j Level_6_Boss_Ai3 19946-19964): when his squire line thins to
+    -- ≤4 living h002, Meldokk casts Resurrection to bring the fallen squires back. Fires on
+    -- any Player(9) death; gated on a living H00C so it goes inert after victory (and never
+    -- triggers on later levels, which also field h002).
+    local res = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(res, P9, EVENT_PLAYER_UNIT_DEATH)
+    TriggerAddCondition(res, Condition(function()
+        return CountLivingPlayerUnitsOfTypeId(FourCC('H00C'), P9) > 0
+            and CountLivingPlayerUnitsOfTypeId(FourCC('h002'), P9) <= 4
+    end))
+    TriggerAddAction(res, function()
+        local hg = GetUnitsOfTypeIdAll(FourCC('H00C'))
+        local b = GroupPickRandomUnit(hg)
+        DestroyGroup(hg)
+        if b then IssueImmediateOrderBJ(b, "resurrection") end
+    end)
 end
 
 -- Level 8 enemy AI: h00Y casts firebolt at its attacker when ≤125 HP, then retreats
@@ -323,9 +348,9 @@ local function setupLevel8AI()
         end)
 end
 
--- Level 10 boss: Goblin King O001 (war3map.j 20290-20360).
--- Spells (Lackeys ANsq, Fury/Stampede AHtc, Spire ANst) are granted here; their
--- cast-AI is a later port — for now the boss is a high-level melee threat.
+-- Level 10 boss: Goblin King O001 (war3map.j 20290-20520).
+-- Spells (Lackeys ANsq, Fury/Stampede AHtc, Spire ANst) are granted here, and the four
+-- cast-AI triggers (Lv_10_Boss_AI_1..4, 20368-20499) drive them.
 local function setupLevel10Boss()
     StartBossMusic()   -- BossMusic1.mp3 loop (war3map.j 20323-20325)
     GoblinSlayer = true
@@ -340,6 +365,86 @@ local function setupLevel10Boss()
         SelectHeroSkill(b, FourCC('ANst'))  -- Spire
     end)
     DestroyGroup(grp)
+
+    -- ── Cast-AI (war3map.j Lv_10_Boss_AI_1..4) ───────────────────────────────────
+    -- All four fire while a Goblin King lives; AI 1/2/4 key off "O001 attacked" and so go
+    -- inert once he's removed at victory, and the periodic AI 3 disables itself when none
+    -- remain. `bossGanked` (a shared upvalue, = the JASS udg_BossGanked) counts hits taken.
+    local bossGanked = 0
+    local kingGone = function() return CountLivingPlayerUnitsOfTypeId(UID.GoblinKing, P9) == 0 end
+    local function forEachKing(order)
+        local g = GetUnitsOfTypeIdAll(UID.GoblinKing)
+        ForGroup(g, function() IssueImmediateOrderBJ(GetEnumUnit(), order) end)
+        DestroyGroup(g)
+    end
+    local function patrolKingsHome()
+        local g = GetUnitsOfTypeIdAll(UID.GoblinKing)
+        ForGroup(g, function()
+            IssuePointOrderLoc(GetEnumUnit(), "patrol", GetRectCenter(rct.StartingPlayerArea))
+        end)
+        DestroyGroup(g)
+    end
+
+    local ai1, ai2, ai3, ai4
+
+    -- AI 1 (20368): once ganked 15×, Stampede the attacker's position, pause the other AIs
+    -- for the channel, reset the counter, then patrol home. Created BEFORE AI 2 so on the same
+    -- attack event the ==15 check reads the count before AI 2's increment — matching the JASS
+    -- init order (Lv_10_Boss_AI_1 then _2). (ai2/3/4 are forward-declared upvalues, assigned below.)
+    ai1 = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(ai1, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(ai1, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == UID.GoblinKing and bossGanked == 15
+    end))
+    TriggerAddAction(ai1, function()
+        DisableTrigger(ai1); DisableTrigger(ai2); DisableTrigger(ai3); DisableTrigger(ai4)
+        local g = GetUnitsOfTypeIdAll(UID.GoblinKing)
+        local king = GroupPickRandomUnit(g)
+        DestroyGroup(g)
+        if king then
+            IssuePointOrder(king, "stampede", GetUnitX(GetAttacker()), GetUnitY(GetAttacker()))
+        end
+        FloatText(GetAttackedUnitBJ(), "Fury of the Mountain", 100, 10, 10, 5.0)  -- TRIGSTR_1412
+        TriggerSleepAction(14.0)
+        bossGanked = 0
+        if not kingGone() then
+            EnableTrigger(ai1); EnableTrigger(ai2); EnableTrigger(ai3); EnableTrigger(ai4)
+            TriggerSleepAction(2.0)
+            patrolKingsHome()
+        end
+    end)
+
+    -- AI 2 (20416): every hit on the King advances the gank counter.
+    ai2 = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(ai2, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(ai2, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == UID.GoblinKing
+    end))
+    TriggerAddAction(ai2, function() bossGanked = bossGanked + 1 end)
+
+    -- AI 3 (20437): every 20s summon Lackeys, then patrol home. Self-disables post-victory.
+    ai3 = CreateTrigger()
+    TriggerRegisterTimerEventPeriodic(ai3, 20.0)
+    TriggerAddAction(ai3, function()
+        if kingGone() then DisableTrigger(ai3); return end
+        forEachKing("summonquillbeast")
+        TriggerSleepAction(1.25)
+        if not kingGone() then patrolKingsHome() end
+    end)
+
+    -- AI 4 (20461): when a low-health (<400) attacker engages him, Spire/Thunderclap, then patrol.
+    ai4 = CreateTrigger()
+    TriggerRegisterPlayerUnitEventSimple(ai4, P9, EVENT_PLAYER_UNIT_ATTACKED)
+    TriggerAddCondition(ai4, Condition(function()
+        return GetUnitTypeId(GetAttackedUnitBJ()) == UID.GoblinKing
+            and GetUnitState(GetAttacker(), UNIT_STATE_LIFE) < 400.0
+    end))
+    TriggerAddAction(ai4, function()
+        forEachKing("thunderclap")
+        FloatText(GetAttackedUnitBJ(), "Spire", 100, 10, 10, 5.0)  -- TRIGSTR_1796
+        TriggerSleepAction(1.0)
+        if not kingGone() then patrolKingsHome() end
+    end)
 end
 
 -- ─── Level data ───────────────────────────────────────────────────────────────
@@ -990,8 +1095,19 @@ local function setupLevel14()
         TriggerSleepAction(4.0)
         PlaySoundBJ(snd.GameOverToD)
         TriggerSleepAction(5.0)
+        -- Closing narration (war3map.j 21461-21465, TRIGSTR_8094/8095/8096) then the credits
+        -- roll (21467 ConditionalTriggerExecute(gg_trg_Credits)) — which actually ENDS the game.
+        -- Without this the field stayed paused with no defeat declared (the port hung here).
         DisplayTextToForce(GetPlayersAll(),
-            "|cffff0000With the caravan's destruction, Adomach's lackeys stole the artifact and perverted its true nature with Fell Magic...|r")
+            "|cffff0000With the caravan's destruction, Adomach's lackeys took opportunity of the confusion and stole the artifact.  Using Fell Magic, he perverted its true nature, creating an artifact of great evil.|r")
+        TriggerSleepAction(5.0)
+        DisplayTextToForce(GetPlayersAll(),
+            "|cffff0000Drawing upon the artifact's perverted power, Adomach created a virulent plague and sent it into Vern.  Half the population fell within a week, including the Lady Silmeria.  Those who remained fought desperately, but in vain.|r")
+        TriggerSleepAction(7.0)
+        DisplayTextToForce(GetPlayersAll(),
+            "|cffff0000With Vern conquered, Adomach turned to the south, using his new power to raise legions of plagued undead.  None could stand against his power, and a new reign of darkness began in the land.|r")
+        TriggerSleepAction(5.0)
+        RollDefeatCredits()
     end)
 
     -- waypoint reactions (each fires once, on the CARAVAN entering)
